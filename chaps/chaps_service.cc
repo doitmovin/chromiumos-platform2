@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <iostream>
 #include "chaps/chaps_service.h"
 
 #include <base/logging.h>
@@ -19,7 +20,7 @@ using brillo::SecureBlob;
 
 namespace chaps {
 
-ChapsServiceImpl::ChapsServiceImpl(SlotManager* slot_manager)
+ChapsServiceImpl::ChapsServiceImpl(std::shared_ptr<SlotManager> slot_manager)
     : slot_manager_(slot_manager),
       init_(false) {
 }
@@ -210,7 +211,11 @@ uint32_t ChapsServiceImpl::InitToken(const SecureBlob& isolate_credential,
                           CKR_ARGUMENTS_BAD);
   if (static_cast<int>(slot_id) >= slot_manager_->GetSlotCount() ||
       !slot_manager_->IsTokenAccessible(isolate_credential, slot_id))
-    LOG_CK_RV_AND_RETURN(CKR_SLOT_ID_INVALID);
+      {
+        std::cout << "slot_id: " << slot_id << std::endl;
+        std::cout << "GetSlotCount: " << slot_manager_->GetSlotCount() << std::endl;
+        LOG_CK_RV_AND_RETURN(CKR_SLOT_ID_INVALID);
+      }
   LOG_CK_RV_AND_RETURN_IF(!slot_manager_->IsTokenPresent(isolate_credential,
                                                          slot_id),
                           CKR_TOKEN_NOT_PRESENT);

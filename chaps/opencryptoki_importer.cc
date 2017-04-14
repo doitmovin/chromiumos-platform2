@@ -42,7 +42,7 @@ namespace chaps {
 
 OpencryptokiImporter::OpencryptokiImporter(int slot,
                                            const FilePath& path,
-                                           TPMUtility* tpm,
+                                           std::shared_ptr<TPMUtility> tpm,
                                            ChapsFactory* factory)
     : slot_(slot),
       path_(path),

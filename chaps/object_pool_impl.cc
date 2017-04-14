@@ -41,8 +41,11 @@ ObjectPoolImpl::ObjectPoolImpl(ChapsFactory* factory,
       store_(store),
       importer_(importer),
       is_private_loaded_(false),
-      private_loaded_event_(true, false),  // Manual reset, not signaled.
-      finish_import_required_(false) {}
+      private_loaded_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+        base::WaitableEvent::InitialState::NOT_SIGNALED),  // Manual reset, not signaled.
+      finish_import_required_(false) {
+        store_.reset();
+      }
 
 ObjectPoolImpl::~ObjectPoolImpl() {}
 

@@ -10,17 +10,20 @@
 #include <string>
 #include <vector>
 
-#include <base/macros.h>
-#include <base/logging.h>
-#include <base/synchronization/waitable_event.h>
+#include "base/macros.h"
+#include "base/logging.h"
+//#include <base/synchronization/waitable_event.h>
 
 #include "chaps/attributes.h"
-#include "chaps/chaps_proxy.h"
+#include "chaps/chaps_service.h"
 #include "chaps/chaps_utility.h"
 #include "chaps/isolate.h"
 #include "pkcs11/cryptoki.h"
+#include "chaps/tpm_utility.h"
+#include "chaps/chaps_factory_impl.h"
+#include "chaps/slot_manager_impl.h"
 
-using base::WaitableEvent;
+//using base::WaitableEvent;
 using std::string;
 using std::vector;
 
@@ -113,6 +116,7 @@ EXPORT_SPEC void DisableMockProxy() {
 CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
   if (g_is_initialized)
     return CKR_CRYPTOKI_ALREADY_INITIALIZED;
+  logging::SetMinLogLevel(-10);
   // Validate args (if any).
   if (pInitArgs) {
     CK_C_INITIALIZE_ARGS_PTR args =
@@ -132,16 +136,24 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
   }
   // If we're not using a mock proxy instance we need to create one.
   if (!g_is_using_mock) {
-    std::unique_ptr<chaps::ChapsProxyImpl> proxy(new chaps::ChapsProxyImpl());
+    std::shared_ptr<chaps::TPMUtility> tpm(NULL);
+    std::shared_ptr<chaps::ChapsFactoryImpl>
+      factory(new chaps::ChapsFactoryImpl());
+    std::shared_ptr<chaps::SlotManagerImpl>
+      slot_mgr(new chaps::SlotManagerImpl(factory, tpm, true));
+    if (!slot_mgr->Init())
+        LOG_CK_RV_AND_RETURN(CKR_GENERAL_ERROR);
+    std::unique_ptr<chaps::ChapsServiceImpl>
+      proxy(new chaps::ChapsServiceImpl(slot_mgr));
     CHECK(proxy.get());
     if (!proxy->Init())
       LOG_CK_RV_AND_RETURN(CKR_GENERAL_ERROR);
     g_proxy = proxy.release();
 
-    g_user_isolate = new brillo::SecureBlob();
-    chaps::IsolateCredentialManager isolate_manager;
-    if (!isolate_manager.GetCurrentUserIsolateCredential(g_user_isolate))
-      *g_user_isolate = isolate_manager.GetDefaultIsolateCredential();
+    g_user_isolate = new brillo::SecureBlob(16);
+//    chaps::IsolateCredentialManager isolate_manager;
+//    if (!isolate_manager.GetCurrentUserIsolateCredential(g_user_isolate))
+//      *g_user_isolate = isolate_manager.GetDefaultIsolateCredential();
   }
   CHECK(g_proxy);
   CHECK(g_user_isolate);

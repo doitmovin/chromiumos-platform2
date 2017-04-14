@@ -14,7 +14,7 @@
 #include <base/files/file_path.h>
 #include <base/macros.h>
 #include <brillo/secure_blob.h>
-#include <gtest/gtest_prod.h>
+//#include <gtest/gtest_prod.h>
 #include <leveldb/db.h>
 #include <leveldb/env.h>
 
@@ -124,10 +124,10 @@ class ObjectStoreImpl : public ObjectStore {
   std::unique_ptr<leveldb::DB> db_;
   std::map<int, BlobType> blob_type_map_;
 
-  friend class TestObjectStoreEncryption;
-  FRIEND_TEST(TestObjectStoreEncryption, EncryptionInit);
-  FRIEND_TEST(TestObjectStoreEncryption, Encryption);
-  FRIEND_TEST(TestObjectStoreEncryption, CBCMode);
+//  friend class TestObjectStoreEncryption;
+//  FRIEND_TEST(TestObjectStoreEncryption, EncryptionInit);
+//  FRIEND_TEST(TestObjectStoreEncryption, Encryption);
+//  FRIEND_TEST(TestObjectStoreEncryption, CBCMode);
 
   DISALLOW_COPY_AND_ASSIGN(ObjectStoreImpl);
 };

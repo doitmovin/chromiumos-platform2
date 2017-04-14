@@ -7,6 +7,7 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 
 #include "chaps/chaps_interface.h"
 #include "chaps/slot_manager.h"
@@ -21,7 +22,7 @@ class ChapsServiceImpl : public ChapsInterface {
  public:
   // ChapsServiceImpl does not take ownership of slot_manager and will not
   // delete it.
-  explicit ChapsServiceImpl(SlotManager* slot_manager);
+  explicit ChapsServiceImpl(std::shared_ptr<SlotManager> slot_manager);
   virtual ~ChapsServiceImpl();
   bool Init();
   void TearDown();
@@ -359,7 +360,7 @@ class ChapsServiceImpl : public ChapsInterface {
       std::vector<uint8_t>* random_data);
 
  private:
-  SlotManager* slot_manager_;
+  std::shared_ptr<SlotManager> slot_manager_;
   bool init_;
 
   DISALLOW_COPY_AND_ASSIGN(ChapsServiceImpl);

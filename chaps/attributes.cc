@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include <base/logging.h>
+#include "base/logging.h"
 
 #include "chaps/chaps_utility.h"
 #include "chaps/proto_bindings/attributes.pb.h"

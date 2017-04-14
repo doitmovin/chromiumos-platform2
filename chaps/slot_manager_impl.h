@@ -38,8 +38,8 @@ class SlotManagerImpl : public SlotManager,
                         public TokenManagerInterface,
                         public HandleGenerator {
  public:
-  SlotManagerImpl(ChapsFactory* factory,
-                  TPMUtility* tpm_utility,
+  SlotManagerImpl(std::shared_ptr<ChapsFactory> factory,
+                  std::shared_ptr<TPMUtility> tpm_utility,
                   bool auto_load_system_token);
   virtual ~SlotManagerImpl();
 
@@ -172,7 +172,7 @@ class SlotManagerImpl : public SlotManager,
   bool InitializeSoftwareToken(const brillo::SecureBlob& auth_data,
                                ObjectPool* object_pool);
 
-  ChapsFactory* factory_;
+  std::shared_ptr<ChapsFactory> factory_;
   int last_handle_;
   MechanismMap mechanism_info_;
   // Key: A path to a token's storage directory.
@@ -183,7 +183,7 @@ class SlotManagerImpl : public SlotManager,
   // Value: The identifier of the associated slot.
   std::map<int, int> session_slot_map_;
   std::map<brillo::SecureBlob, Isolate> isolate_map_;
-  TPMUtility* tpm_utility_;
+  std::shared_ptr<TPMUtility> tpm_utility_;
   base::Lock handle_generator_lock_;
   bool auto_load_system_token_;
   bool is_initialized_;

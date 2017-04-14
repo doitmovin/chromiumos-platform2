@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
-#include <base/logging.h>
-#include <base/stl_util.h>
-#include <brillo/secure_blob.h>
+#include "base/logging.h"
+#include "base/stl_util.h"
+#include "brillo/secure_blob.h"
 
 #include "chaps/chaps.h"
 #include "pkcs11/cryptoki.h"
@@ -286,7 +286,7 @@ bool RunCipher(bool is_encrypt,
 bool IsIntegralAttribute(CK_ATTRIBUTE_TYPE type);
 
 inline void ClearString(std::string* str) {
-  brillo::SecureMemset(string_as_array(str), 0, str->length());
+  brillo::SecureMemset(base::string_as_array(str), 0, str->length());
 }
 
 inline void ClearVector(std::vector<uint8_t>* vector) {

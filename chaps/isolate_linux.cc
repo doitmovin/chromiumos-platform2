@@ -24,7 +24,7 @@ namespace chaps {
 namespace {
 
 const FilePath::CharType kIsolateFilePath[] =
-    FILE_PATH_LITERAL("/var/lib/chaps/isolates/");
+    FILE_PATH_LITERAL("/tmp/chaps/isolates/");
 
 }  // namespace
 

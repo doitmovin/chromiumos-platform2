@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHAPS_TPM_UTILITY_IMPL_H_
-#define CHAPS_TPM_UTILITY_IMPL_H_
+#ifndef CHAPS_TPM_UTILITY_NETHSM_H_
+#define CHAPS_TPM_UTILITY_NETHSM_H_
 
 #include "chaps/tpm_utility.h"
 
@@ -11,17 +11,17 @@
 #include <set>
 #include <string>
 
-#include <base/macros.h>
-#include <base/synchronization/lock.h>
+// #include <base/macros.h>
+// #include <base/synchronization/lock.h>
 //#include <trousers/scoped_tss_type.h>
 //#include <trousers/tss.h>
 
 namespace chaps {
 
-class TPMUtilityImpl : public TPMUtility {
+class TPMUtilityNetHsm : public TPMUtility {
  public:
-  explicit TPMUtilityImpl(const std::string& srk_auth_data);
-  virtual ~TPMUtilityImpl();
+  explicit TPMUtilityNetHsm(const std::string& srk_auth_data);
+  virtual ~TPMUtilityNetHsm();
   virtual bool Init();
   virtual bool IsTPMAvailable();
   virtual bool Authenticate(int slot_id,
@@ -132,9 +132,9 @@ class TPMUtilityImpl : public TPMUtility {
   bool is_enabled_;
   bool is_enabled_ready_;
 
-  DISALLOW_COPY_AND_ASSIGN(TPMUtilityImpl);
+  DISALLOW_COPY_AND_ASSIGN(TPMUtilityNetHsm);
 };
 
 }  // namespace chaps
 
-#endif  // CHAPS_TPM_UTILITY_IMPL_H_
+#endif  // CHAPS_TPM_UTILITY_NETHSM_H_

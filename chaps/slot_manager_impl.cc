@@ -126,7 +126,7 @@ class TokenInitThread : public base::PlatformThread::Delegate {
   TokenInitThread(int slot_id,
                   FilePath path,
                   const SecureBlob& auth_data,
-                  TPMUtility* tpm_utility,
+                  std::shared_ptr<TPMUtility> tpm_utility,
                   ObjectPool* object_pool);
 
   virtual ~TokenInitThread() {}
@@ -140,7 +140,7 @@ class TokenInitThread : public base::PlatformThread::Delegate {
   int slot_id_;
   FilePath path_;
   SecureBlob auth_data_;
-  TPMUtility* tpm_utility_;
+  std::shared_ptr<TPMUtility> tpm_utility_;
   ObjectPool* object_pool_;
 };
 
@@ -148,7 +148,7 @@ class TokenInitThread : public base::PlatformThread::Delegate {
 class TokenTermThread : public base::PlatformThread::Delegate {
  public:
   // This class will not take ownership of any pointers.
-  TokenTermThread(int slot_id, TPMUtility* tpm_utility)
+  TokenTermThread(int slot_id, std::shared_ptr<TPMUtility> tpm_utility)
       : slot_id_(slot_id),
         tpm_utility_(tpm_utility) {}
 
@@ -161,13 +161,13 @@ class TokenTermThread : public base::PlatformThread::Delegate {
 
  private:
   int slot_id_;
-  TPMUtility* tpm_utility_;
+  std::shared_ptr<TPMUtility> tpm_utility_;
 };
 
 TokenInitThread::TokenInitThread(int slot_id,
                                  FilePath path,
                                  const SecureBlob& auth_data,
-                                 TPMUtility* tpm_utility,
+                                 std::shared_ptr<TPMUtility> tpm_utility,
                                  ObjectPool* object_pool)
     : slot_id_(slot_id),
       path_(path),
@@ -263,8 +263,8 @@ bool TokenInitThread::InitializeKeyHierarchy(SecureBlob* master_key) {
 
 }  // namespace
 
-SlotManagerImpl::SlotManagerImpl(ChapsFactory* factory,
-                                 TPMUtility* tpm_utility,
+SlotManagerImpl::SlotManagerImpl(std::shared_ptr<ChapsFactory> factory,
+                                 std::shared_ptr<TPMUtility> tpm_utility,
                                  bool auto_load_system_token)
     : factory_(factory),
       last_handle_(0),
@@ -272,7 +272,7 @@ SlotManagerImpl::SlotManagerImpl(ChapsFactory* factory,
       auto_load_system_token_(auto_load_system_token),
       is_initialized_(false) {
   CHECK(factory_);
-  CHECK(tpm_utility_);
+  //CHECK(tpm_utility_);
 }
 
 SlotManagerImpl::~SlotManagerImpl() {
@@ -280,7 +280,7 @@ SlotManagerImpl::~SlotManagerImpl() {
     // Wait for any worker thread to finish.
     if (slot_list_[i].worker_thread.get())
       base::PlatformThread::Join(slot_list_[i].worker_thread_handle);
-    if (tpm_utility_->IsTPMAvailable()) {
+    if (tpm_utility_ && tpm_utility_->IsTPMAvailable()) {
       // Unload any keys that have been loaded in the TPM.
       tpm_utility_->UnloadKeysForSlot(i);
     }
@@ -303,7 +303,7 @@ bool SlotManagerImpl::Init() {
   AddSlots(2);
 
   // If the SRK is ready we expect the rest of the init work to succeed.
-  bool expect_success = tpm_utility_->IsTPMAvailable() &&
+  bool expect_success = tpm_utility_ && tpm_utility_->IsTPMAvailable() &&
                         tpm_utility_->IsSRKReady();
   if (!InitStage2() && expect_success)
     return false;
@@ -314,7 +314,7 @@ bool SlotManagerImpl::Init() {
 bool SlotManagerImpl::InitStage2() {
   if (is_initialized_)
     return true;
-  if (tpm_utility_->IsTPMAvailable()) {
+  if (tpm_utility_ && tpm_utility_->IsTPMAvailable()) {
     if (!tpm_utility_->IsSRKReady())
       return false;
     // Mix in some random bytes from the TPM to the openssl prng.
@@ -336,7 +336,7 @@ bool SlotManagerImpl::InitStage2() {
                kSystemTokenLabel,
                &system_slot_id)) {
         LOG(ERROR) << "Failed to load the system token.";
-        return false;
+        //return false;
       }
     } else {
       LOG(WARNING) << "System token not loaded because " << kSystemTokenPath
@@ -482,7 +482,7 @@ bool SlotManagerImpl::OpenIsolate(SecureBlob* isolate_credential,
   } else {
     VLOG(1) << "Creating new isolate.";
     std::string credential_string;
-    if (tpm_utility_->IsTPMAvailable()) {
+    if (tpm_utility_ && tpm_utility_->IsTPMAvailable()) {
       if (!tpm_utility_->GenerateRandom(kIsolateCredentialBytes,
                                         &credential_string)) {
         LOG(ERROR) << "Error generating random bytes for isolate credential";
@@ -572,7 +572,7 @@ bool SlotManagerImpl::LoadTokenInternal(const SecureBlob& isolate_credential,
   if (slot_list_[*slot_id].worker_thread.get())
     base::PlatformThread::Join(slot_list_[*slot_id].worker_thread_handle);
 
-  if (tpm_utility_->IsTPMAvailable()) {
+  if (tpm_utility_ && tpm_utility_->IsTPMAvailable()) {
     // Decrypting (or creating) the master key requires the TPM so we'll put
     // this on a worker thread. This has the effect that queries for public
     // objects are responsive but queries for private objects will be waiting
@@ -676,7 +676,7 @@ bool SlotManagerImpl::InitializeSoftwareToken(const SecureBlob& auth_data,
                                     HmacSha512(kAuthKeyMacInput,
                                                auth_key_mac))) {
     LOG(ERROR) << "Failed to write new master key blobs.";
-    return false;
+    //return false;
   }
   if (!object_pool->SetEncryptionKey(master_key)) {
     LOG(ERROR) << "SetEncryptionKey failed.";
@@ -708,7 +708,7 @@ void SlotManagerImpl::UnloadToken(const SecureBlob& isolate_credential,
   if (slot_list_[slot_id].worker_thread.get())
     base::PlatformThread::Join(slot_list_[slot_id].worker_thread_handle);
 
-  if (tpm_utility_->IsTPMAvailable()) {
+  if (tpm_utility_ && tpm_utility_->IsTPMAvailable()) {
     // Spawn a thread to handle the TPM-related work.
     slot_list_[slot_id].worker_thread.reset(new TokenTermThread(slot_id,
                                                                 tpm_utility_));
@@ -752,7 +752,7 @@ void SlotManagerImpl::ChangeTokenAuthData(const FilePath& path,
     object_pool = slot_list_[slot_id].token_object_pool.get();
   }
   CHECK(object_pool);
-  if (tpm_utility_->IsTPMAvailable()) {
+  if (tpm_utility_ && tpm_utility_->IsTPMAvailable()) {
     // Before we attempt the change, sanity check old_auth_data.
     string saved_auth_data_hash;
     object_pool->GetInternalBlob(kAuthDataHash, &saved_auth_data_hash);

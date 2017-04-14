@@ -351,7 +351,7 @@ ifeq ($(MODE),profiling)
   LDFLAGS := $(LDFLAGS) --coverage
 endif
 
-LDFLAGS := $(LDFLAGS) -Wl,-z,relro -Wl,-z,noexecstack -Wl,-z,now
+#LDFLAGS := $(LDFLAGS) -Wl,-z,relro -Wl,-z,noexecstack -Wl,-z,now
 
 # Fancy helpers for color if a prompt is defined
 ifeq ($(COLOR),1)
@@ -415,7 +415,7 @@ COMMA := ,
 define COMPILE_LIBRARY_implementation
   @$(ECHO) "SHARED$(1)	$(subst $(PWD)/,,$(TARGET_OR_MEMBER))"
   $(call auto_mkdir,$(TARGET_OR_MEMBER))
-  $(QUIET)$($(1)) -shared -Wl,-E -o $(TARGET_OR_MEMBER) \
+  $(QUIET)$($(1)) -shared -o $(TARGET_OR_MEMBER) \
     $(2) $(LDFLAGS) \
     $(if $(filter %.a,$^),-Wl$(COMMA)--whole-archive,) \
     $(filter %.o ,$(^:.o=.pic.o)) \
@@ -598,7 +598,7 @@ define OBJECT_PATTERN_implementation
   $(QUIET)# Wrap all the deps in $$(wildcard) so a missing header
   $(QUIET)# won't cause weirdness.  First we remove newlines and \,
   $(QUIET)# then wrap it.
-  $(QUIET)sed -i -e :j -e '$$!N;s|\\\s*\n| |;tj' \
+  $(QUIET)sed -i '' -e :j -e '$$!N;s|\\\s*\n| |;tj' \
     -e 's|^\(.*\s*:\s*\)\(.*\)$$|\1 $$\(wildcard \2\)|' $(2).d
 endef
 

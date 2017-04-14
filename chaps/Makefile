@@ -7,6 +7,11 @@
 # Setting LINUX_BUILD=1 will build chaps for a standard (non-Chrome OS) linux
 # system.
 
+LINUX_BUILD=1
+
+CC=clang
+CXX=clang++
+
 # Pull in chromium os defaults
 PWD ?= $(CURDIR)
 OUT ?= $(PWD)/build-opt-local
@@ -28,13 +33,18 @@ BUILD_PAM_MODULE ?= $(LINUX_BUILD)
 LIB_DIR ?= /usr/lib
 PAM_MODULE_DIR ?= /lib/security
 
-PC_DEPS = dbus-c++-1 protobuf-lite openssl \
+#PC_DEPS = dbus-c++-1 protobuf-lite openssl \
 	libchrome-$(BASE_VER) libbrillo-$(BASE_VER)
+PC_DEPS =
 PC_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PC_DEPS))
 PC_LIBS := $(shell $(PKG_CONFIG) --libs $(PC_DEPS))
 
-CXXFLAGS += -I$(SRC)/.. -I$(OUT) $(PC_CFLAGS) -DNDEBUG -std=gnu++11 -fexceptions
-LDLIBS += $(PC_LIBS)
+CFLAGS += -I$(SRC) -I$(SRC)/.. -I$(SRC)/../../Chromium/src -I$(OUT) $(PC_CFLAGS) -DNDEBUG -fexceptions
+CXXFLAGS += -I$(SRC) -I$(SRC)/.. -I$(SRC)/../../Chromium/src -I$(OUT) $(PC_CFLAGS) -DNDEBUG -std=gnu++11 -fexceptions -Wno-deprecated-declarations
+LDLIBS += -L/usr/local/opt/openssl/lib -L/usr/local/lib $(PC_LIBS) -framework CoreFoundation -framework AppKit -framework Security -L$(SRC)/../../Chromium/src/out/Default/obj/base/ -lbase -lbase_static -L$(SRC)/../../Chromium/src/out//Default/obj/base/third_party/dynamic_annotations -ldynamic_annotations -lprotobuf -levent -lssl -lcrypto -lboost_system -lboost_chrono -lboost_thread-mt -lcpprest
+
+CFLAGS += -DCOMPILER_GCC -DARCH_CPU_X86_FAMILY -DOS_POSIX -DWCHAR_T_IS_UTF32 -DOS_MACOSX -Wno-format-nonliteral
+CXXFLAGS += -DCOMPILER_GCC -DARCH_CPU_X86_FAMILY -DOS_POSIX -DWCHAR_T_IS_UTF32 -DOS_MACOSX -Wno-format-nonliteral
 
 # Test if libmemenv is available, and whether libsnappy is required to
 # compile LevelDB.
@@ -47,6 +57,8 @@ LEVELDB_LIBS := $(call check_libs_cxx, \
 	 leveldb::Options options; leveldb::DB::Open(options, 0, 0);\
 	 return 0;}',\
 	 -lleveldb $(MEMENV_LIB), -lleveldb $(MEMENV_LIB) -lsnappy)
+
+LDLIBS += $(LEVELDB_LIBS)
 
 # Test if libmetric is available
 METRICS_LIB := $(call check_cxx,-lmetrics)
@@ -63,7 +75,7 @@ $(DBUS_PROXIES_DIR)/chaps_interface.h: $(SRC)/chaps_interface.xml
 	$(DBUSXX_XML2CPP) $< --proxy=$@
 clean: CLEAN($(DBUS_PROXIES_DIR)/chaps_interface.h)
 
-chaps_client.o.depends \
+#chaps_client.o.depends \
 chaps_proxy.o.depends \
 chapsd_test.o.depends \
 chaps.o.depends \
@@ -87,12 +99,14 @@ $(PROTO_DIR)/attributes.pb.cc: $(SRC)/attributes.proto
 clean: CLEAN($(PROTO_DIR)/attributes.pb.h $(PROTO_DIR)/attributes.pb.cc)
 $(eval $(call add_object_rules,$(PROTO_DIR)/attributes.pb.o,CXX,cc,CXXFLAGS))
 
+$(eval $(call add_object_rules,base/message_loop/message_pump_mac.o,CXX,mm,CXXFLAGS,$(SRC)/))
 object_pool_impl.o.depends \
 object_pool_test.o.depends \
 attributes.o.depends: $(PROTO_DIR)/attributes.pb.h
 
 # Common Files
 COMMON_OBJS = chaps_utility.o $(PROTO_DIR)/attributes.pb.o attributes.o
+#COMMON_OBJS = chaps_utility.o attributes.o
 
 # Chaps Daemon
 chapsd_OBJS = $(COMMON_OBJS) \
@@ -142,9 +156,188 @@ $(OUT)/org.chromium.Chaps.conf :
 all: $(OUT)/org.chromium.Chaps.conf
 clean: CLEAN($(OUT)/org.chromium.Chaps.conf)
 
+XXX_BASE_OBJS =     base/at_exit.o \
+                base/base_switches.o \
+                base/callback_internal.o \
+                base/command_line.o \
+                base/debug/alias.o \
+                base/debug/debugger.o \
+                base/debug/debugger_posix.o \
+                base/debug/stack_trace.o \
+                base/debug/stack_trace_posix.o \
+                base/environment.o \
+                base/files/file.o \
+                base/files/file_enumerator.o \
+                base/files/file_enumerator_posix.o \
+                base/files/file_path.o \
+                base/files/file_path_constants.o \
+                base/files/file_posix.o \
+                base/files/file_tracing.o \
+                base/files/file_util.o \
+                base/files/file_util_posix.o \
+                base/files/scoped_file.o \
+                base/files/scoped_temp_dir.o \
+								base/hash.o \
+                base/json/json_parser.o \
+                base/json/json_reader.o \
+                base/json/json_string_value_serializer.o \
+                base/json/json_writer.o \
+                base/json/string_escape.o \
+                base/lazy_instance.o \
+                base/location.o \
+                base/logging.o \
+                base/md5.o \
+                base/memory/ref_counted.o \
+                base/memory/ref_counted_memory.o \
+                base/memory/singleton.o \
+                base/memory/weak_ptr.o \
+								base/memory/shared_memory_mac.o \
+								base/message_loop/message_loop.o \
+                base/message_loop/message_pump.o \
+                base/message_loop/message_pump_default.o \
+								base/message_loop/message_pump_mac.o \
+								base/message_loop/message_pump_libevent.o \
+                base/metrics/bucket_ranges.o \
+                base/metrics/histogram_base.o \
+                base/metrics/histogram_samples.o \
+                base/metrics/histogram.o \
+                base/metrics/metrics_hashes.o \
+								base/metrics/persistent_sample_map.o \
+                base/metrics/sample_map.o \
+                base/metrics/sample_vector.o \
+                base/metrics/sparse_histogram.o \
+                base/metrics/statistics_recorder.o \
+								base/metrics/persistent_histogram_allocator.o \
+								base/pending_task.o \
+                base/pickle.o \
+                base/posix/safe_strerror.o \
+								base/process/process_metrics.o \
+								base/process/process_handle.o \
+                base/process/process_handle_posix.o \
+								base/process/process_metrics_mac.o \
+								base/process/process_metrics_posix.o \
+                base/profiler/tracked_time.o \
+                base/rand_util.o \
+                base/rand_util_posix.o \
+								base/sequenced_task_runner.o \
+                base/strings/string16.o \
+                base/strings/string_piece.o \
+                base/strings/stringprintf.o \
+								base/strings/string_util.o \
+                base/strings/string_util_constants.o \
+                base/strings/string_split.o \
+                base/strings/string_number_conversions.o \
+                base/strings/sys_string_conversions_posix.o \
+                base/strings/utf_string_conversions.o \
+                base/strings/utf_string_conversion_utils.o \
+                base/synchronization/condition_variable_posix.o \
+                base/synchronization/lock.o \
+                base/synchronization/lock_impl_posix.o \
+                base/synchronization/waitable_event_posix.o \
+                base/sys_info_posix.o \
+								base/task_runner.o \
+								base/task_scheduler/task_traits.o \
+								base/task_scheduler/task_scheduler.o \
+                base/third_party/dmg_fp/dtoa.o \
+                base/third_party/dmg_fp/g_fmt.o \
+                base/third_party/dynamic_annotations/dynamic_annotations.o \
+                base/third_party/icu/icu_utf.o \
+                base/third_party/nspr/prtime.o \
+								base/third_party/superfasthash/superfasthash.o \
+                base/threading/non_thread_safe_impl.o \
+                base/threading/platform_thread_internal_posix.o \
+                base/threading/platform_thread_posix.o \
+								base/threading/platform_thread_freebsd.o \
+								base/threading/sequenced_task_runner_handle.o \
+								base/threading/sequenced_worker_pool.o \
+								base/threading/simple_thread.o \
+                base/threading/thread_id_name_manager.o \
+                base/threading/thread_checker_impl.o \
+                base/threading/thread_collision_warner.o \
+                base/threading/thread_local_storage.o \
+                base/threading/thread_local_storage_posix.o \
+                base/threading/thread_restrictions.o \
+								base/threading/thread_task_runner_handle.o \
+								base/threading/worker_pool.o \
+								base/threading/worker_pool_posix.o \
+								base/trace_event/auto_open_close_event.o \
+								base/trace_event/blame_context.o \
+								base/trace_event/category_registry.o \
+								base/trace_event/event_name_filter.o \
+								base/trace_event/heap_profiler_allocation_context.o \
+								base/trace_event/heap_profiler_allocation_context_tracker.o \
+								base/trace_event/heap_profiler_allocation_register.o \
+								base/trace_event/heap_profiler_allocation_register_posix.o \
+								base/trace_event/heap_profiler_event_filter.o \
+								base/trace_event/heap_profiler_heap_dump_writer.o \
+								base/trace_event/heap_profiler_stack_frame_deduplicator.o \
+								base/trace_event/heap_profiler_type_name_deduplicator.o \
+								base/trace_event/malloc_dump_provider.o \
+								base/trace_event/memory_allocator_dump.o \
+								base/trace_event/memory_allocator_dump_guid.o \
+								base/trace_event/memory_dump_manager.o \
+								base/trace_event/memory_dump_request_args.o \
+								base/trace_event/memory_dump_session_state.o \
+								base/trace_event/memory_infra_background_whitelist.o \
+								base/trace_event/memory_usage_estimator.o \
+								base/trace_event/process_memory_dump.o \
+								base/trace_event/process_memory_maps.o \
+								base/trace_event/process_memory_totals.o \
+								base/trace_event/trace_buffer.o \
+								base/trace_event/trace_config.o \
+								base/trace_event/trace_event_argument.o \
+								base/trace_event/trace_event_filter.o \
+								base/trace_event/trace_event_filter_test_utils.o \
+								base/trace_event/trace_event_impl.o \
+								base/trace_event/trace_event_memory_overhead.o \
+								base/trace_event/trace_event_synthetic_delay.o \
+								base/trace_event/trace_event_system_stats_monitor.o \
+								base/trace_event/trace_log.o \
+								base/trace_event/trace_log_constants.o \
+								base/trace_event/tracing_agent.o \
+								base/tracking_info.o \
+                base/time/time.o \
+                base/time/time_posix.o \
+								base/time/time_mac.o \
+                base/timer/elapsed_timer.o \
+                base/tracked_objects.o \
+								base/sha1.o \
+								base/sequence_token.o \
+                base/strings/utf_string_conversions.o \
+								base/strings/pattern.o \
+                base/values.o \
+                base/vlog.o
+
+
+
 # Chaps Client Library
-libchaps_OBJS = $(COMMON_OBJS) chaps.o chaps_proxy.o token_manager_client.o \
-                isolate_$(PLATFORM).o
+libchaps_OBJS = $(COMMON_OBJS) chaps.o chaps_service.o \
+								chaps_service.o \
+								slot_manager_impl.o \
+								session_impl.o \
+								object_impl.o \
+								object_policy_common.o \
+								object_policy_data.o \
+								object_policy_cert.o \
+								object_policy_key.o \
+								object_policy_public_key.o \
+								object_policy_private_key.o \
+								object_policy_secret_key.o \
+								object_pool_impl.o \
+								chaps_factory_impl.o \
+								object_store_impl.o \
+								attributes.o \
+								opencryptoki_importer.o \
+								brillo/secure_blob.o
+#								base/synchronization/lock.o
+#							  base/files/file_util.o \
+#								base/files/file_util_posix.o \
+#								base/strings/string_number_conversions.o \
+#								base/strings/stringprintf.o \
+#								base/synchronization/waitable_event_posix.o \
+#								base/location.o \
+#								base/time/time.o \
+#								$(BASE_OBJS)
 CXX_LIBRARY(libchaps.so): $(libchaps_OBJS)
 clean: CLEAN(libchaps.so)
 all: CXX_LIBRARY(libchaps.so)

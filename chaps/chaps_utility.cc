@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-#include <brillo/secure_blob.h>
+#include "brillo/secure_blob.h"
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>

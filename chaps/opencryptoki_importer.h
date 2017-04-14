@@ -26,7 +26,7 @@ class OpencryptokiImporter : public ObjectImporter {
  public:
   OpencryptokiImporter(int slot,
                        const base::FilePath& path,
-                       TPMUtility* tpm,
+                       std::shared_ptr<TPMUtility> tpm,
                        ChapsFactory* factory);
   virtual ~OpencryptokiImporter();
 
@@ -89,7 +89,7 @@ class OpencryptokiImporter : public ObjectImporter {
   // The token slot id. We need this to associate with our key handles.
   int slot_;
   base::FilePath path_;
-  TPMUtility* tpm_;
+  std::shared_ptr<TPMUtility> tpm_;
   ChapsFactory* factory_;
   // Opencrytoki hierarchy key handles.
   int private_root_key_;
@@ -114,4 +114,3 @@ class OpencryptokiImporter : public ObjectImporter {
 }  // namespace chaps
 
 #endif  // CHAPS_OPENCRYPTOKI_IMPORTER_H_
-

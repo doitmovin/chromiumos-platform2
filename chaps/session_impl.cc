@@ -21,6 +21,9 @@
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
 
+#include <cpprest/http_client.h>
+#include <cppcodec/base64_default_url.hpp>
+
 #include "chaps/chaps.h"
 #include "chaps/chaps_factory.h"
 #include "chaps/chaps_utility.h"
@@ -48,7 +51,7 @@ static const int kMaxRSAKeyBitsSW = kMaxRSAOutputBytes * 8;
 
 SessionImpl::SessionImpl(int slot_id,
                          ObjectPool* token_object_pool,
-                         TPMUtility* tpm_utility,
+                         std::shared_ptr<TPMUtility> tpm_utility,
                          ChapsFactory* factory,
                          HandleGenerator* handle_generator,
                          bool is_read_only)
@@ -60,9 +63,10 @@ SessionImpl::SessionImpl(int slot_id,
       tpm_utility_(tpm_utility),
       is_legacy_loaded_(false),
       private_root_key_(0),
-      public_root_key_(0) {
+      public_root_key_(0),
+      nethsm_keys_loaded_(false) {
   CHECK(token_object_pool_);
-  CHECK(tpm_utility_);
+  //CHECK(tpm_utility_);
   CHECK(factory_);
   session_object_pool_.reset(factory_->CreateObjectPool(handle_generator,
                                                         NULL,
@@ -150,10 +154,105 @@ bool SessionImpl::FlushModifiableObject(Object* object) {
   return pool->Flush(object);
 }
 
+namespace Purpose {
+  const string kEncryption = "encryption";
+  const string kSigning = "signing";
+}
+
+void SessionImpl::LoadNetHsmKeys() {
+  web::http::client::http_client_config config;
+  web::http::client::credentials creds("admin", "secret");
+  config.set_credentials(creds);
+  // Create http_client to send the request.
+  web::http::client::http_client client(U("http://localhost:8080"), config);
+
+  //web::uri_builder builder(U("/api/v0/system/status"));
+  //builder.append_query(U("q"), U("cpprestsdk github"));
+  //client.request(web::http::methods::GET, builder.to_string())
+  auto response = client.request(web::http::methods::GET, "/api/v0/keys").get();
+  printf("Received response status code:%u\n", response.status_code());
+  auto json = response.extract_json().get();
+  auto const arr = json["data"].as_array();
+  for (auto i = arr.begin(); i != arr.end(); ++i) {
+    auto const loc = i->at("location").as_string();
+    response = client.request(web::http::methods::GET, loc).get();
+    printf("Received response status code:%u\n", response.status_code());
+    json = response.extract_json().get();
+    auto const id = json["data"]["id"].as_string();
+    auto const modulus = base64::decode<string>(
+      json["data"]["publicKey"]["modulus"].as_string());
+    auto const public_exponent = base64::decode<string>(
+      json["data"]["publicKey"]["publicExponent"].as_string());
+    auto const purpose = json["data"]["purpose"].as_string();
+    const bool forEncrypting(purpose == Purpose::kEncryption);
+    const bool forSigning(purpose == Purpose::kSigning);
+    std::cout << loc << " -> " << id << std::endl;
+
+    std::unique_ptr<Object> public_object(factory_->CreateObject());
+    CHECK(public_object.get());
+    public_object->SetAttributeString(CKA_ID, id);
+    public_object->SetAttributeString(CKA_LABEL, loc);
+    public_object->SetAttributeInt(CKA_CLASS, CKO_PUBLIC_KEY);
+    public_object->SetAttributeInt(CKA_KEY_TYPE, CKK_RSA);
+    public_object->SetAttributeBool(CKA_MODIFIABLE, false);
+    public_object->SetAttributeBool(CKA_TOKEN, true);
+    public_object->SetAttributeString(CKA_PUBLIC_EXPONENT, public_exponent);
+    public_object->SetAttributeString(CKA_MODULUS, modulus);
+    int modulus_bits = modulus.size()*8;
+    public_object->SetAttributeInt(CKA_MODULUS_BITS, modulus_bits);
+    if (forEncrypting) {
+      public_object->SetAttributeBool(CKA_ENCRYPT, true);
+    }
+    if (forSigning) {
+      public_object->SetAttributeBool(CKA_VERIFY, true);
+    }
+
+    std::unique_ptr<Object> private_object(factory_->CreateObject());
+    CHECK(private_object.get());
+    private_object->SetAttributeString(CKA_ID, id);
+    private_object->SetAttributeString(CKA_LABEL, loc);
+    private_object->SetAttributeInt(CKA_CLASS, CKO_PRIVATE_KEY);
+    private_object->SetAttributeInt(CKA_KEY_TYPE, CKK_RSA);
+    private_object->SetAttributeBool(CKA_MODIFIABLE, false);
+    private_object->SetAttributeBool(CKA_TOKEN, true);
+    private_object->SetAttributeBool(CKA_PRIVATE, true);
+    private_object->SetAttributeBool(CKA_SENSITIVE, true);
+    private_object->SetAttributeBool(CKA_EXTRACTABLE, false);
+    private_object->SetAttributeBool(CKA_ALWAYS_SENSITIVE, true);
+    private_object->SetAttributeBool(CKA_NEVER_EXTRACTABLE, true);
+    private_object->SetAttributeString(CKA_PUBLIC_EXPONENT, public_exponent);
+    private_object->SetAttributeString(kKeyBlobAttribute, loc);
+    private_object->SetAttributeString(CKA_MODULUS, modulus);
+    if (forEncrypting) {
+      private_object->SetAttributeBool(CKA_DECRYPT, true);
+    }
+    if (forSigning) {
+      private_object->SetAttributeBool(CKA_SIGN, true);
+    }
+
+    if (public_object->FinalizeNewObject() != CKR_OK)
+    continue;
+    if (private_object->FinalizeNewObject() != CKR_OK)
+    continue;
+    if (!token_object_pool_->Insert(public_object.get()))
+    continue;
+    if (!token_object_pool_->Insert(private_object.get())) {
+      token_object_pool_->Delete(public_object.get());
+      continue;
+    }
+    public_object.release();
+    private_object.release();
+  }
+}
+
 CK_RV SessionImpl::FindObjectsInit(const CK_ATTRIBUTE_PTR attributes,
                                    int num_attributes) {
   if (find_results_valid_)
     return CKR_OPERATION_ACTIVE;
+  if (!nethsm_keys_loaded_) {
+    std::cout << "LoadNetHsmKeys" << std::endl;
+    LoadNetHsmKeys();
+  }
   std::unique_ptr<Object> search_template(factory_->CreateObject());
   CHECK(search_template.get());
   search_template->SetAttributes(attributes, num_attributes);
@@ -584,7 +683,7 @@ CK_RV SessionImpl::GenerateKeyPair(CK_MECHANISM_TYPE mechanism,
   ObjectPool* private_pool = (private_object->IsTokenObject() ?
                               token_object_pool_ : session_object_pool_.get());
   // Check if we are able to back this key with the TPM.
-  if (tpm_utility_->IsTPMAvailable() &&
+  if (tpm_utility_ && tpm_utility_->IsTPMAvailable() &&
       private_object->IsTokenObject() &&
       modulus_bits <= kMaxRSAKeyBitsHW) {
     string auth_data = GenerateRandomSoftware(kDefaultAuthDataBytes);
@@ -1024,7 +1123,7 @@ bool SessionImpl::LoadLegacyRootKeys() {
     LOG(ERROR) << "Failed to read legacy private root key blob.";
     return false;
   }
-  if (!tpm_utility_->LoadKey(slot_id_,
+  if (!tpm_utility_ || !tpm_utility_->LoadKey(slot_id_,
                              private_blob,
                              SecureBlob(),
                              &private_root_key_)) {
@@ -1198,7 +1297,7 @@ bool SessionImpl::RSADecrypt(OperationContext* context) {
       return false;
     string encrypted_data = context->data_;
     context->data_.clear();
-    if (!tpm_utility_->Unbind(tpm_key_handle, encrypted_data, &context->data_))
+    if (!tpm_utility_ || !tpm_utility_->Unbind(tpm_key_handle, encrypted_data, &context->data_))
       return false;
   } else {
     RSA* rsa = CreateKeyFromObject(context->key_);
@@ -1247,7 +1346,7 @@ bool SessionImpl::RSASign(OperationContext* context) {
     int tpm_key_handle = 0;
     if (!GetTPMKeyHandle(context->key_, &tpm_key_handle))
       return false;
-    if (!tpm_utility_->Sign(tpm_key_handle, data_to_sign, &signature))
+    if (!tpm_utility_ || !tpm_utility_->Sign(tpm_key_handle, data_to_sign, &signature))
       return false;
   } else {
     RSA* rsa = CreateKeyFromObject(context->key_);
@@ -1298,7 +1397,7 @@ CK_RV SessionImpl::RSAVerify(OperationContext* context,
 }
 
 CK_RV SessionImpl::WrapPrivateKey(Object* object) {
-  if (!tpm_utility_->IsTPMAvailable() ||
+  if (!tpm_utility_ || !tpm_utility_->IsTPMAvailable() ||
       object->GetObjectClass() != CKO_PRIVATE_KEY ||
       object->IsAttributePresent(kKeyBlobAttribute)) {
     // This object does not need to be wrapped.

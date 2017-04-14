@@ -30,7 +30,7 @@ class ChapsFactory {
   virtual ~ChapsFactory() {}
   virtual Session* CreateSession(int slot_id,
                                  ObjectPool* token_object_pool,
-                                 TPMUtility* tpm_utility,
+                                 std::shared_ptr<TPMUtility> tpm_utility,
                                  HandleGenerator* handle_generator,
                                  bool is_read_only) = 0;
   virtual ObjectPool* CreateObjectPool(HandleGenerator* handle_generator,
@@ -42,7 +42,7 @@ class ChapsFactory {
   // Returns NULL if no importer is available.
   virtual ObjectImporter* CreateObjectImporter(int slot_id,
                                                const base::FilePath& path,
-                                               TPMUtility* tpm_utility) = 0;
+                                               std::shared_ptr<TPMUtility> tpm_utility) = 0;
 };
 
 }  // namespace chaps

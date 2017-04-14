@@ -28,7 +28,7 @@ namespace chaps {
 
 Session* ChapsFactoryImpl::CreateSession(int slot_id,
                                          ObjectPool* token_object_pool,
-                                         TPMUtility* tpm_utility,
+                                         std::shared_ptr<TPMUtility> tpm_utility,
                                          HandleGenerator* handle_generator,
                                          bool is_read_only) {
   return new SessionImpl(slot_id,
@@ -89,8 +89,8 @@ ObjectPolicy* ChapsFactoryImpl::CreateObjectPolicy(CK_OBJECT_CLASS type) {
 ObjectImporter* ChapsFactoryImpl::CreateObjectImporter(
     int slot_id,
     const FilePath& path,
-    TPMUtility* tpm_utility) {
-  if (!tpm_utility->IsTPMAvailable()) {
+    std::shared_ptr<TPMUtility> tpm_utility) {
+  if (!tpm_utility || !tpm_utility->IsTPMAvailable()) {
     return NULL;
   }
   return new OpencryptokiImporter(slot_id, path, tpm_utility, this);

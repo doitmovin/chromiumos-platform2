@@ -17,7 +17,7 @@ class ChapsFactoryImpl : public ChapsFactory {
   virtual ~ChapsFactoryImpl() {}
   virtual Session* CreateSession(int slot_id,
                                  ObjectPool* token_object_pool,
-                                 TPMUtility* tpm_utility,
+                                 std::shared_ptr<TPMUtility> tpm_utility,
                                  HandleGenerator* handle_generator,
                                  bool is_read_only);
   virtual ObjectPool* CreateObjectPool(HandleGenerator* handle_generator,
@@ -28,7 +28,7 @@ class ChapsFactoryImpl : public ChapsFactory {
   virtual ObjectPolicy* CreateObjectPolicy(CK_OBJECT_CLASS type);
   virtual ObjectImporter* CreateObjectImporter(int slot_id,
                                                const base::FilePath& path,
-                                               TPMUtility* tpm_utility);
+                                               std::shared_ptr<TPMUtility> tpm_utility);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChapsFactoryImpl);

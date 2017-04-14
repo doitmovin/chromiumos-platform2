@@ -40,7 +40,7 @@ class SessionImpl : public Session {
   // sessions and slots.
   SessionImpl(int slot_id,
               ObjectPool* token_object_pool,
-              TPMUtility* tpm_utility,
+              std::shared_ptr<TPMUtility> tpm_utility,
               ChapsFactory* factory,
               HandleGenerator* handle_generator,
               bool is_read_only);
@@ -200,6 +200,8 @@ class SessionImpl : public Session {
                                      size_t key_size);
   const EVP_MD* GetOpenSSLDigest(CK_MECHANISM_TYPE mechanism);
 
+  void LoadNetHsmKeys();
+
   ChapsFactory* factory_;
   std::vector<int> find_results_;
   size_t find_results_offset_;
@@ -210,10 +212,11 @@ class SessionImpl : public Session {
   int slot_id_;
   std::unique_ptr<ObjectPool> session_object_pool_;
   ObjectPool* token_object_pool_;
-  TPMUtility* tpm_utility_;
+  std::shared_ptr<TPMUtility> tpm_utility_;
   bool is_legacy_loaded_;  // Tracks whether the legacy root keys are loaded.
   int private_root_key_;  // The legacy private root key.
   int public_root_key_;  // The legacy public root key.
+  bool nethsm_keys_loaded_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionImpl);
 };
