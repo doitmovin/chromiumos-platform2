@@ -41,15 +41,15 @@ namespace {
 // I18N Note: The descriptive strings are needed for PKCS #11 compliance but
 // they should not appear on any UI.
 const CK_VERSION kDefaultVersion = {1, 0};
-const char kManufacturerID[] = "Chromium OS";
+const char kManufacturerID[] = "NitroKey";
 const CK_ULONG kMaxPinLen = 127;
 const CK_ULONG kMinPinLen = 6;
-const char kSlotDescription[] = "TPM Slot";
+const char kSlotDescription[] = "NetHSM Slot";
 const FilePath::CharType kSystemTokenPath[] =
     FILE_PATH_LITERAL("/var/lib/chaps");
 const char kSystemTokenAuthData[] = "000000";
-const char kSystemTokenLabel[] = "System TPM Token";
-const char kTokenLabel[] = "User-Specific TPM Token";
+const char kSystemTokenLabel[] = "System NetHSM Token";
+const char kTokenLabel[] = "User-Specific NetHSM Token";
 const char kTokenModel[] = "";
 const char kTokenSerialNumber[] = "Not Available";
 const int kUserKeySize = 32;

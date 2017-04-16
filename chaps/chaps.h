@@ -18,6 +18,7 @@ extern const size_t kTokenLabelSize;
 extern const CK_ATTRIBUTE_TYPE kKeyBlobAttribute;
 extern const CK_ATTRIBUTE_TYPE kAuthDataAttribute;
 extern const CK_ATTRIBUTE_TYPE kLegacyAttribute;
+extern const CK_ATTRIBUTE_TYPE kKeyLocationAttribute;
 
 }  // namespace chaps
 

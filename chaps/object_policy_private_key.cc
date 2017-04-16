@@ -35,6 +35,7 @@ static const AttributePolicy kPrivateKeyPolicies[] = {
   {CKA_COEFFICIENT, true, {false, false, true}, false},
   {kKeyBlobAttribute, true, {false, true, true}, false},
   {kAuthDataAttribute, true, {false, true, true}, false},
+  {kKeyLocationAttribute, true, {false, true, true}, false},
 };
 
 ObjectPolicyPrivateKey::ObjectPolicyPrivateKey() {
@@ -46,9 +47,9 @@ ObjectPolicyPrivateKey::~ObjectPolicyPrivateKey() {}
 bool ObjectPolicyPrivateKey::IsObjectComplete() {
   if (!ObjectPolicyCommon::IsObjectComplete())
     return false;
-  // Either a private exponent or a TPM key blob must exist.
+  // Either a private exponent or a key location must exist.
   if (!object_->IsAttributePresent(CKA_PRIVATE_EXPONENT) &&
-      !object_->IsAttributePresent(kKeyBlobAttribute)) {
+      !object_->IsAttributePresent(kKeyLocationAttribute)) {
     LOG(ERROR) << "Private key attributes are required.";
     return false;
   }

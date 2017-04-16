@@ -155,37 +155,43 @@ bool SessionImpl::FlushModifiableObject(Object* object) {
 }
 
 namespace Purpose {
-  const string kEncryption = "encryption";
-  const string kSigning = "signing";
+  const string kEncrypt = "encrypt";
+  const string kSign = "sign";
 }
 
-void SessionImpl::LoadNetHsmKeys() {
+void SessionImpl::LoadNetHsmKeys(const string& key_id) {
+  std::cout << "LoadNetHsmKeys" << std::endl;
   web::http::client::http_client_config config;
   web::http::client::credentials creds("admin", "secret");
   config.set_credentials(creds);
-  // Create http_client to send the request.
   web::http::client::http_client client(U("http://localhost:8080"), config);
 
-  //web::uri_builder builder(U("/api/v0/system/status"));
-  //builder.append_query(U("q"), U("cpprestsdk github"));
-  //client.request(web::http::methods::GET, builder.to_string())
-  auto response = client.request(web::http::methods::GET, "/api/v0/keys").get();
-  printf("Received response status code:%u\n", response.status_code());
-  auto json = response.extract_json().get();
-  auto const arr = json["data"].as_array();
-  for (auto i = arr.begin(); i != arr.end(); ++i) {
-    auto const loc = i->at("location").as_string();
-    response = client.request(web::http::methods::GET, loc).get();
+  std::vector<std::string> locations;
+  if (key_id.empty()) {
+    auto response = client.request(web::http::methods::GET, "/api/v0/keys").get();
     printf("Received response status code:%u\n", response.status_code());
-    json = response.extract_json().get();
+    auto json = response.extract_json().get();
+    auto const arr = json["data"].as_array();
+    for (auto i = arr.begin(); i != arr.end(); ++i) {
+      auto const loc = i->at("location").as_string();
+      locations.push_back(loc);
+    }
+  } else {
+    locations.push_back("/api/v0/keys/" + key_id);
+  }
+  for (auto i = locations.begin(); i != locations.end(); ++i) {
+    auto const loc = *i;
+    auto response = client.request(web::http::methods::GET, loc).get();
+    printf("Received response status code:%u\n", response.status_code());
+    auto json = response.extract_json().get();
     auto const id = json["data"]["id"].as_string();
     auto const modulus = base64::decode<string>(
       json["data"]["publicKey"]["modulus"].as_string());
     auto const public_exponent = base64::decode<string>(
       json["data"]["publicKey"]["publicExponent"].as_string());
     auto const purpose = json["data"]["purpose"].as_string();
-    const bool forEncrypting(purpose == Purpose::kEncryption);
-    const bool forSigning(purpose == Purpose::kSigning);
+    const bool forEncrypting(boost::starts_with(purpose, Purpose::kEncrypt));
+    const bool forSigning(boost::starts_with(purpose, Purpose::kSign));
     std::cout << loc << " -> " << id << std::endl;
 
     std::unique_ptr<Object> public_object(factory_->CreateObject());
@@ -221,7 +227,7 @@ void SessionImpl::LoadNetHsmKeys() {
     private_object->SetAttributeBool(CKA_ALWAYS_SENSITIVE, true);
     private_object->SetAttributeBool(CKA_NEVER_EXTRACTABLE, true);
     private_object->SetAttributeString(CKA_PUBLIC_EXPONENT, public_exponent);
-    private_object->SetAttributeString(kKeyBlobAttribute, loc);
+    private_object->SetAttributeString(kKeyLocationAttribute, loc);
     private_object->SetAttributeString(CKA_MODULUS, modulus);
     if (forEncrypting) {
       private_object->SetAttributeBool(CKA_DECRYPT, true);
@@ -243,19 +249,25 @@ void SessionImpl::LoadNetHsmKeys() {
     public_object.release();
     private_object.release();
   }
+  nethsm_keys_loaded_ = true;
 }
 
 CK_RV SessionImpl::FindObjectsInit(const CK_ATTRIBUTE_PTR attributes,
                                    int num_attributes) {
   if (find_results_valid_)
     return CKR_OPERATION_ACTIVE;
-  if (!nethsm_keys_loaded_) {
-    std::cout << "LoadNetHsmKeys" << std::endl;
-    LoadNetHsmKeys();
-  }
   std::unique_ptr<Object> search_template(factory_->CreateObject());
   CHECK(search_template.get());
   search_template->SetAttributes(attributes, num_attributes);
+
+  if (search_template->IsAttributePresent(CKA_ID)) {
+    auto key_id = search_template->GetAttributeString(CKA_ID);
+    std::cout << "CKA_ID is set: " << key_id << std::endl;
+    LoadNetHsmKeys(key_id);
+  } else {
+    LoadNetHsmKeys();
+  }
+
   vector<const Object*> objects;
   if (!search_template->IsAttributePresent(CKA_TOKEN) ||
       search_template->IsTokenObject()) {
@@ -1085,7 +1097,7 @@ bool SessionImpl::GetTPMKeyHandle(const Object* key, int* key_handle) {
           return false;
         bool is_private = key->GetAttributeBool(CKA_PRIVATE, true);
         int root_key_handle = is_private ? private_root_key_ : public_root_key_;
-        if (!tpm_utility_->LoadKeyWithParent(
+        if (!tpm_utility_ || !tpm_utility_->LoadKeyWithParent(
             slot_id_,
             key->GetAttributeString(kKeyBlobAttribute),
             SecureBlob(auth_data.begin(), auth_data.end()),
@@ -1093,7 +1105,7 @@ bool SessionImpl::GetTPMKeyHandle(const Object* key, int* key_handle) {
             key_handle))
           return false;
       } else {
-        if (!tpm_utility_->LoadKey(
+        if (!tpm_utility_ || !tpm_utility_->LoadKey(
             slot_id_,
             key->GetAttributeString(kKeyBlobAttribute),
             SecureBlob(auth_data.begin(), auth_data.end()),
@@ -1289,15 +1301,38 @@ const EVP_MD* SessionImpl::GetOpenSSLDigest(CK_MECHANISM_TYPE mechanism) {
   return NULL;
 }
 
+bool NetHSMDecrypt(const std::string& key_loc,
+                   const std::string& encrypted_data,
+                   std::string& result) {
+  std::cout << __PRETTY_FUNCTION__ << std::endl;
+  web::http::client::http_client_config config;
+  web::http::client::credentials creds("admin", "secret");
+  config.set_credentials(creds);
+  // Create http_client to send the request.
+  web::http::client::http_client client(U("http://localhost:8080"), config);
+
+  //web::uri_builder builder(U("/api/v0/system/status"));
+  //builder.append_query(U("q"), U("cpprestsdk github"));
+  //client.request(web::http::methods::GET, builder.to_string())
+  string encrypted_data_b64 = base64::encode(encrypted_data);
+  auto body = web::json::value::parse("{\"encrypted\": \"" + encrypted_data_b64 + "\"}");
+
+  auto response = client.request(web::http::methods::POST,
+                                 key_loc + "/actions/pkcs1/decrypt", body).get();
+  printf("Received response status code:%u\n", response.status_code());
+  auto json = response.extract_json().get();
+  std::cout << json.serialize() << std::endl;
+  result = base64::decode<string>(json["data"]["decrypted"].as_string());
+  return true;
+}
+
 bool SessionImpl::RSADecrypt(OperationContext* context) {
   if (context->key_->IsTokenObject() &&
-      context->key_->IsAttributePresent(kKeyBlobAttribute)) {
-    int tpm_key_handle = 0;
-    if (!GetTPMKeyHandle(context->key_, &tpm_key_handle))
-      return false;
+      context->key_->IsAttributePresent(kKeyLocationAttribute)) {
     string encrypted_data = context->data_;
     context->data_.clear();
-    if (!tpm_utility_ || !tpm_utility_->Unbind(tpm_key_handle, encrypted_data, &context->data_))
+    string key_loc = context->key_->GetAttributeString(kKeyLocationAttribute);
+    if (!NetHSMDecrypt(key_loc, encrypted_data, context->data_))
       return false;
   } else {
     RSA* rsa = CreateKeyFromObject(context->key_);

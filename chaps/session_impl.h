@@ -200,7 +200,7 @@ class SessionImpl : public Session {
                                      size_t key_size);
   const EVP_MD* GetOpenSSLDigest(CK_MECHANISM_TYPE mechanism);
 
-  void LoadNetHsmKeys();
+  void LoadNetHsmKeys(const std::string& key_id = std::string());
 
   ChapsFactory* factory_;
   std::vector<int> find_results_;
