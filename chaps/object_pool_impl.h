@@ -36,10 +36,10 @@ class ObjectPoolImpl : public ObjectPool {
   // pool. They must remain valid for the entire life of the ObjectPoolImpl
   // instance. If the object pool is not persistent, 'store' should be NULL.
   // Otherwise, 'store' will be owned by (and later deleted by) the object pool.
-  ObjectPoolImpl(ChapsFactory* factory,
-                 HandleGenerator* handle_generator,
-                 ObjectStore* store,
-                 ObjectImporter* importer);
+  ObjectPoolImpl(std::shared_ptr<ChapsFactory> factory,
+                 std::shared_ptr<HandleGenerator> handle_generator,
+                 std::unique_ptr<ObjectStore> store,
+                 std::unique_ptr<ObjectImporter> importer);
   virtual ~ObjectPoolImpl();
   virtual bool Init();
   virtual bool GetInternalBlob(int blob_id, std::string* blob);
@@ -70,8 +70,8 @@ class ObjectPoolImpl : public ObjectPool {
   // Allows us to quickly check whether an object exists in the pool.
   ObjectSet objects_;
   HandleObjectMap handle_object_map_;
-  ChapsFactory* factory_;
-  HandleGenerator* handle_generator_;
+  std::shared_ptr<ChapsFactory> factory_;
+  std::shared_ptr<HandleGenerator> handle_generator_;
   std::unique_ptr<ObjectStore> store_;
   std::unique_ptr<ObjectImporter> importer_;
   bool is_private_loaded_;

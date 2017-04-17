@@ -32,14 +32,14 @@ using std::vector;
 
 namespace chaps {
 
-ObjectPoolImpl::ObjectPoolImpl(ChapsFactory* factory,
-                               HandleGenerator* handle_generator,
-                               ObjectStore* store,
-                               ObjectImporter* importer)
+ObjectPoolImpl::ObjectPoolImpl(std::shared_ptr<ChapsFactory> factory,
+                               std::shared_ptr<HandleGenerator> handle_generator,
+                               std::unique_ptr<ObjectStore> store,
+                               std::unique_ptr<ObjectImporter> importer)
     : factory_(factory),
       handle_generator_(handle_generator),
-      store_(store),
-      importer_(importer),
+      store_(std::move(store)),
+      importer_(std::move(importer)),
       is_private_loaded_(false),
       private_loaded_event_(base::WaitableEvent::ResetPolicy::MANUAL,
         base::WaitableEvent::InitialState::NOT_SIGNALED),  // Manual reset, not signaled.

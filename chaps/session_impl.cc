@@ -29,6 +29,8 @@
 #include "chaps/chaps_utility.h"
 #include "chaps/object.h"
 #include "chaps/object_pool.h"
+#include "chaps/object_store.h"
+#include "chaps/object_importer.h"
 #include "chaps/tpm_utility.h"
 #include "pkcs11/cryptoki.h"
 
@@ -50,10 +52,10 @@ static const int kMaxRSAKeyBitsHW = 2048;  // Max supported by the TPM.
 static const int kMaxRSAKeyBitsSW = kMaxRSAOutputBytes * 8;
 
 SessionImpl::SessionImpl(int slot_id,
-                         ObjectPool* token_object_pool,
+                         std::shared_ptr<ObjectPool> token_object_pool,
                          std::shared_ptr<TPMUtility> tpm_utility,
-                         ChapsFactory* factory,
-                         HandleGenerator* handle_generator,
+                         std::shared_ptr<ChapsFactory> factory,
+                         std::shared_ptr<HandleGenerator> handle_generator,
                          bool is_read_only)
     : factory_(factory),
       find_results_valid_(false),
@@ -69,8 +71,8 @@ SessionImpl::SessionImpl(int slot_id,
   //CHECK(tpm_utility_);
   CHECK(factory_);
   session_object_pool_.reset(factory_->CreateObjectPool(handle_generator,
-                                                        NULL,
-                                                        NULL));
+                                                        std::unique_ptr<ObjectStore>(),
+                                                        std::unique_ptr<ObjectImporter>()));
   CHECK(session_object_pool_.get());
 }
 
@@ -122,8 +124,8 @@ CK_RV SessionImpl::DestroyObject(int object_handle) {
   if (!GetObject(object_handle, &object))
     return CKR_OBJECT_HANDLE_INVALID;
   CHECK(object);
-  ObjectPool* pool = object->IsTokenObject() ? token_object_pool_
-      : session_object_pool_.get();
+  std::shared_ptr<ObjectPool> pool = object->IsTokenObject() ? token_object_pool_
+      : session_object_pool_;
   if (!pool->Delete(object))
     return CKR_GENERAL_ERROR;
   return CKR_OK;
@@ -141,16 +143,16 @@ bool SessionImpl::GetModifiableObject(int object_handle, Object** object) {
   const Object* const_object;
   if (!GetObject(object_handle, &const_object))
     return false;
-  ObjectPool* pool = const_object->IsTokenObject() ? token_object_pool_
-      : session_object_pool_.get();
+  std::shared_ptr<ObjectPool> pool = const_object->IsTokenObject() ? token_object_pool_
+      : session_object_pool_;
   *object = pool->GetModifiableObject(const_object);
   return true;
 }
 
 bool SessionImpl::FlushModifiableObject(Object* object) {
   CHECK(object);
-  ObjectPool* pool = object->IsTokenObject() ? token_object_pool_
-      : session_object_pool_.get();
+  std::shared_ptr<ObjectPool> pool = object->IsTokenObject() ? token_object_pool_
+      : session_object_pool_;
   return pool->Flush(object);
 }
 
@@ -176,6 +178,7 @@ void SessionImpl::LoadNetHsmKeys(const string& key_id) {
       auto const loc = i->at("location").as_string();
       locations.push_back(loc);
     }
+    nethsm_keys_loaded_ = true;
   } else {
     locations.push_back("/api/v0/keys/" + key_id);
   }
@@ -237,11 +240,11 @@ void SessionImpl::LoadNetHsmKeys(const string& key_id) {
     }
 
     if (public_object->FinalizeNewObject() != CKR_OK)
-    continue;
+      continue;
     if (private_object->FinalizeNewObject() != CKR_OK)
-    continue;
+      continue;
     if (!token_object_pool_->Insert(public_object.get()))
-    continue;
+      continue;
     if (!token_object_pool_->Insert(private_object.get())) {
       token_object_pool_->Delete(public_object.get());
       continue;
@@ -249,7 +252,6 @@ void SessionImpl::LoadNetHsmKeys(const string& key_id) {
     public_object.release();
     private_object.release();
   }
-  nethsm_keys_loaded_ = true;
 }
 
 CK_RV SessionImpl::FindObjectsInit(const CK_ATTRIBUTE_PTR attributes,
@@ -644,8 +646,8 @@ CK_RV SessionImpl::GenerateKey(CK_MECHANISM_TYPE mechanism,
   result = object->FinalizeNewObject();
   if (result != CKR_OK)
     return result;
-  ObjectPool* pool = object->IsTokenObject() ? token_object_pool_
-      : session_object_pool_.get();
+  std::shared_ptr<ObjectPool> pool = object->IsTokenObject() ? token_object_pool_
+      : session_object_pool_;
   if (!pool->Insert(object.get()))
     return CKR_FUNCTION_FAILED;
   *new_key_handle = object.release()->handle();
@@ -690,10 +692,10 @@ CK_RV SessionImpl::GenerateKeyPair(CK_MECHANISM_TYPE mechanism,
   int modulus_bits = public_object->GetAttributeInt(CKA_MODULUS_BITS, 0);
   if (modulus_bits < kMinRSAKeyBits || modulus_bits > kMaxRSAKeyBitsSW)
     return CKR_KEY_SIZE_RANGE;
-  ObjectPool* public_pool = (public_object->IsTokenObject() ?
-                             token_object_pool_ : session_object_pool_.get());
-  ObjectPool* private_pool = (private_object->IsTokenObject() ?
-                              token_object_pool_ : session_object_pool_.get());
+  std::shared_ptr<ObjectPool> public_pool = (public_object->IsTokenObject() ?
+                             token_object_pool_ : session_object_pool_);
+  std::shared_ptr<ObjectPool> private_pool = (private_object->IsTokenObject() ?
+                              token_object_pool_ : session_object_pool_);
   // Check if we are able to back this key with the TPM.
   if (tpm_utility_ && tpm_utility_->IsTPMAvailable() &&
       private_object->IsTokenObject() &&
@@ -971,13 +973,13 @@ CK_RV SessionImpl::CreateObjectInternal(const CK_ATTRIBUTE_PTR attributes,
     if (result != CKR_OK)
       return result;
   }
-  ObjectPool* pool = token_object_pool_;
+  std::shared_ptr<ObjectPool> pool = token_object_pool_;
   if (object->IsTokenObject()) {
     result = WrapPrivateKey(object.get());
     if (result != CKR_OK)
       return result;
   } else {
-    pool = session_object_pool_.get();
+    pool = session_object_pool_;
   }
   if (!pool->Insert(object.get()))
     return CKR_GENERAL_ERROR;

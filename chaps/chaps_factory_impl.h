@@ -11,18 +11,19 @@
 
 namespace chaps {
 
-class ChapsFactoryImpl : public ChapsFactory {
+class ChapsFactoryImpl : public ChapsFactory,
+                         public std::enable_shared_from_this<ChapsFactoryImpl> {
  public:
   ChapsFactoryImpl() {}
   virtual ~ChapsFactoryImpl() {}
   virtual Session* CreateSession(int slot_id,
-                                 ObjectPool* token_object_pool,
+                                 std::shared_ptr<ObjectPool> token_object_pool,
                                  std::shared_ptr<TPMUtility> tpm_utility,
-                                 HandleGenerator* handle_generator,
+                                 std::shared_ptr<HandleGenerator> handle_generator,
                                  bool is_read_only);
-  virtual ObjectPool* CreateObjectPool(HandleGenerator* handle_generator,
-                                       ObjectStore* store,
-                                       ObjectImporter* importer);
+  virtual ObjectPool* CreateObjectPool(std::shared_ptr<HandleGenerator> handle_generator,
+                                       std::unique_ptr<ObjectStore> store,
+                                       std::unique_ptr<ObjectImporter> importer);
   virtual ObjectStore* CreateObjectStore(const base::FilePath& file_name);
   virtual Object* CreateObject();
   virtual ObjectPolicy* CreateObjectPolicy(CK_OBJECT_CLASS type);

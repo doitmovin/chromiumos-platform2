@@ -36,7 +36,8 @@ class TPMUtility;
 //    // Ready for use by SlotManager and LoginEventListener clients.
 class SlotManagerImpl : public SlotManager,
                         public TokenManagerInterface,
-                        public HandleGenerator {
+                        public HandleGenerator,
+                        public std::enable_shared_from_this<SlotManagerImpl> {
  public:
   SlotManagerImpl(std::shared_ptr<ChapsFactory> factory,
                   std::shared_ptr<TPMUtility> tpm_utility,

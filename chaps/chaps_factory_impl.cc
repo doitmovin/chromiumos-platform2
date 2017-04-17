@@ -27,26 +27,26 @@ using std::string;
 namespace chaps {
 
 Session* ChapsFactoryImpl::CreateSession(int slot_id,
-                                         ObjectPool* token_object_pool,
+                                         std::shared_ptr<ObjectPool> token_object_pool,
                                          std::shared_ptr<TPMUtility> tpm_utility,
-                                         HandleGenerator* handle_generator,
+                                         std::shared_ptr<HandleGenerator> handle_generator,
                                          bool is_read_only) {
   return new SessionImpl(slot_id,
                          token_object_pool,
                          tpm_utility,
-                         this,
+                         shared_from_this(),
                          handle_generator,
                          is_read_only);
 }
 
 ObjectPool* ChapsFactoryImpl::CreateObjectPool(
-    HandleGenerator* handle_generator,
-    ObjectStore* object_store,
-    ObjectImporter* object_importer) {
-  std::unique_ptr<ObjectPoolImpl> pool(new ObjectPoolImpl(this,
+    std::shared_ptr<HandleGenerator> handle_generator,
+    std::unique_ptr<ObjectStore> object_store,
+    std::unique_ptr<ObjectImporter> object_importer) {
+  std::unique_ptr<ObjectPoolImpl> pool(new ObjectPoolImpl(shared_from_this(),
                                                      handle_generator,
-                                                     object_store,
-                                                     object_importer));
+                                                     std::move(object_store),
+                                                     std::move(object_importer)));
   CHECK(pool.get());
   if (!pool->Init())
     return NULL;

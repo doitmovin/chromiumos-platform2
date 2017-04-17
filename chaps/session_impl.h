@@ -39,10 +39,10 @@ class SessionImpl : public Session {
   // The tpm and factory objects are typically singletons and shared across all
   // sessions and slots.
   SessionImpl(int slot_id,
-              ObjectPool* token_object_pool,
+              std::shared_ptr<ObjectPool> token_object_pool,
               std::shared_ptr<TPMUtility> tpm_utility,
-              ChapsFactory* factory,
-              HandleGenerator* handle_generator,
+              std::shared_ptr<ChapsFactory> factory,
+              std::shared_ptr<HandleGenerator> handle_generator,
               bool is_read_only);
   virtual ~SessionImpl();
 
@@ -202,7 +202,7 @@ class SessionImpl : public Session {
 
   void LoadNetHsmKeys(const std::string& key_id = std::string());
 
-  ChapsFactory* factory_;
+  std::shared_ptr<ChapsFactory> factory_;
   std::vector<int> find_results_;
   size_t find_results_offset_;
   bool find_results_valid_;
@@ -210,8 +210,8 @@ class SessionImpl : public Session {
   std::map<const Object*, int> object_tpm_handle_map_;
   OperationContext operation_context_[kNumOperationTypes];
   int slot_id_;
-  std::unique_ptr<ObjectPool> session_object_pool_;
-  ObjectPool* token_object_pool_;
+  std::shared_ptr<ObjectPool> session_object_pool_;
+  std::shared_ptr<ObjectPool> token_object_pool_;
   std::shared_ptr<TPMUtility> tpm_utility_;
   bool is_legacy_loaded_;  // Tracks whether the legacy root keys are loaded.
   int private_root_key_;  // The legacy private root key.

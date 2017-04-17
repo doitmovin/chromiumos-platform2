@@ -21,6 +21,7 @@
 
 #include "chaps/chaps_utility.h"
 #include "chaps/isolate.h"
+#include "chaps/object_store.h"
 #include "chaps/object_importer.h"
 #include "chaps/session.h"
 #include "chaps/tpm_utility.h"
@@ -406,9 +407,9 @@ int SlotManagerImpl::OpenSession(const SecureBlob& isolate_credential,
 
   shared_ptr<Session> session(factory_->CreateSession(
       slot_id,
-      slot_list_[slot_id].token_object_pool.get(),
+      slot_list_[slot_id].token_object_pool,
       tpm_utility_,
-      this,
+      shared_from_this(),
       is_read_only));
   CHECK(session.get());
   int session_id = CreateHandle();
@@ -560,12 +561,15 @@ bool SlotManagerImpl::LoadTokenInternal(const SecureBlob& isolate_credential,
   }
   // Setup the object pool.
   *slot_id = FindEmptySlot();
+  auto object_store = std::unique_ptr<ObjectStore>(factory_->CreateObjectStore(path));
+  auto object_importer = std::unique_ptr<ObjectImporter>(
+    factory_->CreateObjectImporter(*slot_id,
+      path,
+      tpm_utility_));
   shared_ptr<ObjectPool> object_pool(
-      factory_->CreateObjectPool(this,
-                                 factory_->CreateObjectStore(path),
-                                 factory_->CreateObjectImporter(*slot_id,
-                                                                path,
-                                                                tpm_utility_)));
+      factory_->CreateObjectPool(shared_from_this(),
+                                 std::move(object_store),
+                                 std::move(object_importer)));
   CHECK(object_pool.get());
 
   // Wait for the termination of a previous token.
@@ -736,20 +740,19 @@ void SlotManagerImpl::ChangeTokenAuthData(const FilePath& path,
   }
   // This event can be handled whether or not we are already managing the token
   // but if we're not, we won't start until a Load Token event comes in.
-  ObjectPool* object_pool = NULL;
-  std::unique_ptr<ObjectPool> scoped_object_pool;
+  std::shared_ptr<ObjectPool> object_pool;
   int slot_id = 0;
   bool unload = false;
   if (path_slot_map_.find(path) == path_slot_map_.end()) {
-    object_pool = factory_->CreateObjectPool(this,
-                                             factory_->CreateObjectStore(path),
-                                             NULL);
-    scoped_object_pool.reset(object_pool);
+    auto object_store = std::unique_ptr<ObjectStore>(factory_->CreateObjectStore(path));
+    object_pool.reset(factory_->CreateObjectPool(shared_from_this(),
+                std::move(object_store),
+                std::unique_ptr<ObjectImporter>()));
     slot_id = FindEmptySlot();
     unload = true;
   } else {
     slot_id = path_slot_map_[path];
-    object_pool = slot_list_[slot_id].token_object_pool.get();
+    object_pool = slot_list_[slot_id].token_object_pool;
   }
   CHECK(object_pool);
   if (tpm_utility_ && tpm_utility_->IsTPMAvailable()) {
