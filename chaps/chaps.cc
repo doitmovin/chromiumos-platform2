@@ -139,7 +139,7 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
     std::shared_ptr<chaps::ChapsFactoryImpl>
       factory(new chaps::ChapsFactoryImpl());
     std::shared_ptr<chaps::SlotManagerImpl>
-      slot_mgr(new chaps::SlotManagerImpl(factory, NULL, true));
+      slot_mgr(new chaps::SlotManagerImpl(factory, true));
     if (!slot_mgr->Init())
         LOG_CK_RV_AND_RETURN(CKR_GENERAL_ERROR);
     std::unique_ptr<chaps::ChapsServiceImpl>

@@ -97,15 +97,12 @@ const struct MechanismInfo {
 }  // namespace
 
 SlotManagerImpl::SlotManagerImpl(std::shared_ptr<ChapsFactory> factory,
-                                 std::shared_ptr<NetUtility> net_utility,
                                  bool auto_load_system_token)
     : factory_(factory),
       last_handle_(0),
-      net_utility_(net_utility),
       auto_load_system_token_(auto_load_system_token),
       is_initialized_(false) {
   CHECK(factory_);
-  //CHECK(net_utility_);
 }
 
 SlotManagerImpl::~SlotManagerImpl() {}
@@ -214,7 +211,7 @@ int SlotManagerImpl::OpenSession(const SecureBlob& isolate_credential,
   shared_ptr<Session> session(factory_->CreateSession(
       slot_id,
       slot_list_[slot_id].token_object_pool,
-      net_utility_,
+      slot_list_[slot_id].net_utility,
       shared_from_this(),
       is_read_only));
   CHECK(session.get());
@@ -359,9 +356,8 @@ bool SlotManagerImpl::LoadTokenInternal(const SecureBlob& isolate_credential,
   }
   // Setup the object pool.
   *slot_id = FindEmptySlot();
-  auto object_store =
-    std::unique_ptr<ObjectStore>(factory_->CreateObjectStore(path));
-  shared_ptr<ObjectPool> object_pool(
+  std::unique_ptr<ObjectStore> object_store(factory_->CreateObjectStore(path));
+  std::shared_ptr<ObjectPool> object_pool(
     factory_->CreateObjectPool(shared_from_this(), std::move(object_store)));
   CHECK(object_pool.get());
 
@@ -371,8 +367,12 @@ bool SlotManagerImpl::LoadTokenInternal(const SecureBlob& isolate_credential,
     return false;
   }
 
+  shared_ptr<NetUtility> net_utility(factory_->CreateNetUtility(object_pool));
+  net_utility->Init();
+
   // Insert the new token into the empty slot.
   slot_list_[*slot_id].token_object_pool = object_pool;
+  slot_list_[*slot_id].net_utility = net_utility;
   slot_list_[*slot_id].slot_info.flags |= CKF_TOKEN_PRESENT;
   path_slot_map_[path] = *slot_id;
   CopyStringToCharBuffer(label,
@@ -483,6 +483,7 @@ void SlotManagerImpl::UnloadToken(const SecureBlob& isolate_credential,
 
   CloseAllSessions(isolate_credential, slot_id);
   slot_list_[slot_id].token_object_pool.reset();
+  slot_list_[slot_id].net_utility.reset();
   slot_list_[slot_id].slot_info.flags &= ~CKF_TOKEN_PRESENT;
   path_slot_map_.erase(path);
   // Remove slot from the isolate.

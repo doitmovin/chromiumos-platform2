@@ -200,8 +200,6 @@ class SessionImpl : public Session {
                                      size_t key_size);
   const EVP_MD* GetOpenSSLDigest(CK_MECHANISM_TYPE mechanism);
 
-  void LoadNetHsmKeys(const std::string& key_id = std::string());
-
   std::shared_ptr<ChapsFactory> factory_;
   std::vector<int> find_results_;
   size_t find_results_offset_;
@@ -216,7 +214,6 @@ class SessionImpl : public Session {
   bool is_legacy_loaded_;  // Tracks whether the legacy root keys are loaded.
   int private_root_key_;  // The legacy private root key.
   int public_root_key_;  // The legacy public root key.
-  bool nethsm_keys_loaded_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionImpl);
 };

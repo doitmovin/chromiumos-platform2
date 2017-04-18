@@ -38,6 +38,7 @@ class ChapsFactory {
   virtual ObjectStore* CreateObjectStore(const base::FilePath& file_name) = 0;
   virtual Object* CreateObject() = 0;
   virtual ObjectPolicy* CreateObjectPolicy(CK_OBJECT_CLASS type) = 0;
+  virtual NetUtility* CreateNetUtility(std::shared_ptr<ObjectPool> token_object_pool) = 0;
 };
 
 }  // namespace chaps

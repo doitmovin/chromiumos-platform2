@@ -19,6 +19,7 @@
 #include "chaps/object_store_fake.h"
 #include "chaps/object_store_impl.h"
 #include "chaps/session_impl.h"
+#include "net_utility_impl.h"
 
 using base::FilePath;
 using std::string;
@@ -81,6 +82,13 @@ ObjectPolicy* ChapsFactoryImpl::CreateObjectPolicy(CK_OBJECT_CLASS type) {
       return new ObjectPolicySecretKey();
   }
   return new ObjectPolicyCommon();
+}
+
+NetUtility* ChapsFactoryImpl::CreateNetUtility(
+  std::shared_ptr<ObjectPool> token_object_pool
+) {
+  return new NetUtilityImpl(token_object_pool,
+                            shared_from_this());
 }
 
 }  // namespace chaps

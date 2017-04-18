@@ -326,6 +326,7 @@ libchaps_OBJS = $(COMMON_OBJS) chaps.o \
 								object_pool_impl.o \
 								chaps_factory_impl.o \
 								object_store_impl.o \
+								net_utility_impl.o \
 								attributes.o \
 								brillo/secure_blob.o
 CXX_LIBRARY(libchaps.so): $(libchaps_OBJS)

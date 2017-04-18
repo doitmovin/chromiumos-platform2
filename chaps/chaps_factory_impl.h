@@ -26,6 +26,7 @@ class ChapsFactoryImpl : public ChapsFactory,
   virtual ObjectStore* CreateObjectStore(const base::FilePath& file_name);
   virtual Object* CreateObject();
   virtual ObjectPolicy* CreateObjectPolicy(CK_OBJECT_CLASS type);
+  virtual NetUtility* CreateNetUtility(std::shared_ptr<ObjectPool> token_object_pool);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChapsFactoryImpl);

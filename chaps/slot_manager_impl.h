@@ -40,7 +40,6 @@ class SlotManagerImpl : public SlotManager,
                         public std::enable_shared_from_this<SlotManagerImpl> {
  public:
   SlotManagerImpl(std::shared_ptr<ChapsFactory> factory,
-                  std::shared_ptr<NetUtility> net_utility,
                   bool auto_load_system_token);
   virtual ~SlotManagerImpl();
 
@@ -107,6 +106,7 @@ class SlotManagerImpl : public SlotManager,
     CK_SLOT_INFO slot_info;
     CK_TOKEN_INFO token_info;
     std::shared_ptr<ObjectPool> token_object_pool;
+    std::shared_ptr<NetUtility> net_utility;
     // Key: A session identifier.
     // Value: The associated session object.
     std::map<int, std::shared_ptr<Session>> sessions;
@@ -182,7 +182,6 @@ class SlotManagerImpl : public SlotManager,
   // Value: The identifier of the associated slot.
   std::map<int, int> session_slot_map_;
   std::map<brillo::SecureBlob, Isolate> isolate_map_;
-  std::shared_ptr<NetUtility> net_utility_;
   base::Lock handle_generator_lock_;
   bool auto_load_system_token_;
   bool is_initialized_;
