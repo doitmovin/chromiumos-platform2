@@ -43,17 +43,17 @@ using std::vector;
 
 namespace chaps {
 
-static const int kDefaultAuthDataBytes = 20;
+//static const int kDefaultAuthDataBytes = 20;
 static const int kMaxCipherBlockBytes = 16;
 static const int kMaxRSAOutputBytes = 2048;
 static const int kMaxDigestOutputBytes = EVP_MAX_MD_SIZE;
 static const int kMinRSAKeyBits = 512;
-static const int kMaxRSAKeyBitsHW = 2048;  // Max supported by the TPM.
+//static const int kMaxRSAKeyBitsHW = 2048;  // Max supported by the TPM.
 static const int kMaxRSAKeyBitsSW = kMaxRSAOutputBytes * 8;
 
 SessionImpl::SessionImpl(int slot_id,
                          std::shared_ptr<ObjectPool> token_object_pool,
-                         std::shared_ptr<TPMUtility> tpm_utility,
+                         std::shared_ptr<NetUtility> net_utility,
                          std::shared_ptr<ChapsFactory> factory,
                          std::shared_ptr<HandleGenerator> handle_generator,
                          bool is_read_only)
@@ -62,17 +62,17 @@ SessionImpl::SessionImpl(int slot_id,
       is_read_only_(is_read_only),
       slot_id_(slot_id),
       token_object_pool_(token_object_pool),
-      tpm_utility_(tpm_utility),
+      net_utility_(net_utility),
       is_legacy_loaded_(false),
       private_root_key_(0),
       public_root_key_(0),
       nethsm_keys_loaded_(false) {
   CHECK(token_object_pool_);
-  //CHECK(tpm_utility_);
+  //CHECK(net_utility_);
   CHECK(factory_);
-  session_object_pool_.reset(factory_->CreateObjectPool(handle_generator,
-                                                        std::unique_ptr<ObjectStore>(),
-                                                        std::unique_ptr<ObjectImporter>()));
+  session_object_pool_.reset(
+    factory_->CreateObjectPool(handle_generator,
+                               std::unique_ptr<ObjectStore>()));
   CHECK(session_object_pool_.get());
 }
 
@@ -697,34 +697,34 @@ CK_RV SessionImpl::GenerateKeyPair(CK_MECHANISM_TYPE mechanism,
   std::shared_ptr<ObjectPool> private_pool = (private_object->IsTokenObject() ?
                               token_object_pool_ : session_object_pool_);
   // Check if we are able to back this key with the TPM.
-  if (tpm_utility_ && tpm_utility_->IsTPMAvailable() &&
-      private_object->IsTokenObject() &&
-      modulus_bits <= kMaxRSAKeyBitsHW) {
-    string auth_data = GenerateRandomSoftware(kDefaultAuthDataBytes);
-    string key_blob;
-    int tpm_key_handle;
-    if (!tpm_utility_->GenerateKey(slot_id_,
-                                   modulus_bits,
-                                   public_exponent,
-                                   SecureBlob(auth_data.begin(),
-                                              auth_data.end()),
-                                   &key_blob,
-                                   &tpm_key_handle))
-      return CKR_FUNCTION_FAILED;
-    string modulus;
-    if (!tpm_utility_->GetPublicKey(tpm_key_handle, &public_exponent, &modulus))
-      return CKR_FUNCTION_FAILED;
-    public_object->SetAttributeString(CKA_MODULUS, modulus);
-    private_object->SetAttributeString(CKA_MODULUS, modulus);
-    private_object->SetAttributeString(kAuthDataAttribute, auth_data);
-    private_object->SetAttributeString(kKeyBlobAttribute, key_blob);
-  } else {
+  // if (tpm_utility_ && tpm_utility_->IsTPMAvailable() &&
+  //     private_object->IsTokenObject() &&
+  //     modulus_bits <= kMaxRSAKeyBitsHW) {
+  //   string auth_data = GenerateRandomSoftware(kDefaultAuthDataBytes);
+  //   string key_blob;
+  //   int tpm_key_handle;
+  //   if (!tpm_utility_->GenerateKey(slot_id_,
+  //                                  modulus_bits,
+  //                                  public_exponent,
+  //                                  SecureBlob(auth_data.begin(),
+  //                                             auth_data.end()),
+  //                                  &key_blob,
+  //                                  &tpm_key_handle))
+  //     return CKR_FUNCTION_FAILED;
+  //   string modulus;
+  //   if (!tpm_utility_->GetPublicKey(tpm_key_handle, &public_exponent, &modulus))
+  //     return CKR_FUNCTION_FAILED;
+  //   public_object->SetAttributeString(CKA_MODULUS, modulus);
+  //   private_object->SetAttributeString(CKA_MODULUS, modulus);
+  //   private_object->SetAttributeString(kAuthDataAttribute, auth_data);
+  //   private_object->SetAttributeString(kKeyBlobAttribute, key_blob);
+  // } else {
     if (!GenerateKeyPairSoftware(modulus_bits,
                                  public_exponent,
                                  public_object.get(),
                                  private_object.get()))
       return CKR_FUNCTION_FAILED;
-  }
+//  }
   public_object->SetAttributeInt(CKA_CLASS, CKO_PUBLIC_KEY);
   public_object->SetAttributeInt(CKA_KEY_TYPE, CKK_RSA);
   private_object->SetAttributeInt(CKA_CLASS, CKO_PRIVATE_KEY);
@@ -1085,45 +1085,45 @@ CK_ATTRIBUTE_TYPE SessionImpl::GetRequiredKeyUsage(OperationType operation) {
   return 0;
 }
 
-bool SessionImpl::GetTPMKeyHandle(const Object* key, int* key_handle) {
-  map<const Object*, int>::iterator it = object_tpm_handle_map_.find(key);
-  if (it == object_tpm_handle_map_.end()) {
-    // Only private keys are loaded into the TPM. All public key operations do
-    // not use the TPM (and use OpenSSL instead).
-    if (key->GetObjectClass() == CKO_PRIVATE_KEY) {
-      string auth_data = key->GetAttributeString(kAuthDataAttribute);
-      if (key->GetAttributeBool(kLegacyAttribute, false)) {
-        // This is a legacy key and it needs to be loaded with the legacy root
-        // key.
-        if (!LoadLegacyRootKeys())
-          return false;
-        bool is_private = key->GetAttributeBool(CKA_PRIVATE, true);
-        int root_key_handle = is_private ? private_root_key_ : public_root_key_;
-        if (!tpm_utility_ || !tpm_utility_->LoadKeyWithParent(
-            slot_id_,
-            key->GetAttributeString(kKeyBlobAttribute),
-            SecureBlob(auth_data.begin(), auth_data.end()),
-            root_key_handle,
-            key_handle))
-          return false;
-      } else {
-        if (!tpm_utility_ || !tpm_utility_->LoadKey(
-            slot_id_,
-            key->GetAttributeString(kKeyBlobAttribute),
-            SecureBlob(auth_data.begin(), auth_data.end()),
-            key_handle))
-          return false;
-      }
-    } else {
-      LOG(ERROR) << "Invalid object class for loading into TPM.";
-      return false;
-    }
-    object_tpm_handle_map_[key] = *key_handle;
-  } else {
-    *key_handle = it->second;
-  }
-  return true;
-}
+// bool SessionImpl::GetTPMKeyHandle(const Object* key, int* key_handle) {
+//   map<const Object*, int>::iterator it = object_tpm_handle_map_.find(key);
+//   if (it == object_tpm_handle_map_.end()) {
+//     // Only private keys are loaded into the TPM. All public key operations do
+//     // not use the TPM (and use OpenSSL instead).
+//     if (key->GetObjectClass() == CKO_PRIVATE_KEY) {
+//       string auth_data = key->GetAttributeString(kAuthDataAttribute);
+//       if (key->GetAttributeBool(kLegacyAttribute, false)) {
+//         // This is a legacy key and it needs to be loaded with the legacy root
+//         // key.
+//         if (!LoadLegacyRootKeys())
+//           return false;
+//         bool is_private = key->GetAttributeBool(CKA_PRIVATE, true);
+//         int root_key_handle = is_private ? private_root_key_ : public_root_key_;
+//         if (!tpm_utility_ || !tpm_utility_->LoadKeyWithParent(
+//             slot_id_,
+//             key->GetAttributeString(kKeyBlobAttribute),
+//             SecureBlob(auth_data.begin(), auth_data.end()),
+//             root_key_handle,
+//             key_handle))
+//           return false;
+//       } else {
+//         if (!tpm_utility_ || !tpm_utility_->LoadKey(
+//             slot_id_,
+//             key->GetAttributeString(kKeyBlobAttribute),
+//             SecureBlob(auth_data.begin(), auth_data.end()),
+//             key_handle))
+//           return false;
+//       }
+//     } else {
+//       LOG(ERROR) << "Invalid object class for loading into TPM.";
+//       return false;
+//     }
+//     object_tpm_handle_map_[key] = *key_handle;
+//   } else {
+//     *key_handle = it->second;
+//   }
+//   return true;
+// }
 
 bool SessionImpl::LoadLegacyRootKeys() {
   if (is_legacy_loaded_)
@@ -1137,26 +1137,26 @@ bool SessionImpl::LoadLegacyRootKeys() {
     LOG(ERROR) << "Failed to read legacy private root key blob.";
     return false;
   }
-  if (!tpm_utility_ || !tpm_utility_->LoadKey(slot_id_,
-                             private_blob,
-                             SecureBlob(),
-                             &private_root_key_)) {
-    LOG(ERROR) << "Failed to load legacy private root key.";
-    return false;
-  }
-  string public_blob;
-  if (!token_object_pool_->GetInternalBlob(kLegacyPublicRootKey,
-                                           &public_blob)) {
-    LOG(ERROR) << "Failed to read legacy public root key blob.";
-    return false;
-  }
-  if (!tpm_utility_->LoadKey(slot_id_, public_blob, SecureBlob(),
-                             &public_root_key_)) {
-    LOG(ERROR) << "Failed to load legacy public root key.";
-    return false;
-  }
-  is_legacy_loaded_ = true;
-  return true;
+  // if (!tpm_utility_ || !tpm_utility_->LoadKey(slot_id_,
+  //                            private_blob,
+  //                            SecureBlob(),
+  //                            &private_root_key_)) {
+     LOG(ERROR) << "Failed to load legacy private root key.";
+     return false;
+  // }
+  // string public_blob;
+  // if (!token_object_pool_->GetInternalBlob(kLegacyPublicRootKey,
+  //                                          &public_blob)) {
+  //   LOG(ERROR) << "Failed to read legacy public root key blob.";
+  //   return false;
+  // }
+  // if (!tpm_utility_->LoadKey(slot_id_, public_blob, SecureBlob(),
+  //                            &public_root_key_)) {
+  //   LOG(ERROR) << "Failed to load legacy public root key.";
+  //   return false;
+  // }
+  // is_legacy_loaded_ = true;
+  // return true;
 }
 
 bool SessionImpl::IsHMAC(CK_MECHANISM_TYPE mechanism) {
@@ -1380,11 +1380,11 @@ bool SessionImpl::RSASign(OperationContext* context) {
   string signature;
   if (context->key_->IsTokenObject() &&
       context->key_->IsAttributePresent(kKeyBlobAttribute)) {
-    int tpm_key_handle = 0;
-    if (!GetTPMKeyHandle(context->key_, &tpm_key_handle))
-      return false;
-    if (!tpm_utility_ || !tpm_utility_->Sign(tpm_key_handle, data_to_sign, &signature))
-      return false;
+    // int tpm_key_handle = 0;
+    // if (!GetTPMKeyHandle(context->key_, &tpm_key_handle))
+    //   return false;
+    // if (!tpm_utility_ || !tpm_utility_->Sign(tpm_key_handle, data_to_sign, &signature))
+    //   return false;
   } else {
     RSA* rsa = CreateKeyFromObject(context->key_);
     CHECK(RSA_size(rsa) <= kMaxRSAOutputBytes);
@@ -1434,49 +1434,49 @@ CK_RV SessionImpl::RSAVerify(OperationContext* context,
 }
 
 CK_RV SessionImpl::WrapPrivateKey(Object* object) {
-  if (!tpm_utility_ || !tpm_utility_->IsTPMAvailable() ||
-      object->GetObjectClass() != CKO_PRIVATE_KEY ||
-      object->IsAttributePresent(kKeyBlobAttribute)) {
-    // This object does not need to be wrapped.
-    return CKR_OK;
-  }
-  if (!object->IsAttributePresent(CKA_PUBLIC_EXPONENT) ||
-      !object->IsAttributePresent(CKA_MODULUS) ||
-      !(object->IsAttributePresent(CKA_PRIME_1) ||
-        object->IsAttributePresent(CKA_PRIME_2)))
-    return CKR_TEMPLATE_INCOMPLETE;
-  string prime;
-  if (object->IsAttributePresent(CKA_PRIME_1)) {
-    prime = object->GetAttributeString(CKA_PRIME_1);
-  } else {
-    prime = object->GetAttributeString(CKA_PRIME_2);
-  }
-  int key_size_bits = object->GetAttributeString(CKA_MODULUS).length() * 8;
-  if (key_size_bits > kMaxRSAKeyBitsHW || key_size_bits < kMinRSAKeyBits) {
-    LOG(WARNING) << "WARNING: " << key_size_bits
-                 << "-bit private key cannot be wrapped by the TPM.";
-    // Fall back to software.
-    return CKR_OK;
-  }
-  string auth_data = GenerateRandomSoftware(kDefaultAuthDataBytes);
-  string key_blob;
-  int tpm_key_handle = 0;
-  if (!tpm_utility_->WrapKey(slot_id_,
-                             object->GetAttributeString(CKA_PUBLIC_EXPONENT),
-                             object->GetAttributeString(CKA_MODULUS),
-                             prime,
-                             SecureBlob(auth_data.begin(), auth_data.end()),
-                             &key_blob,
-                             &tpm_key_handle))
-    return CKR_FUNCTION_FAILED;
-  object->SetAttributeString(kAuthDataAttribute, auth_data);
-  object->SetAttributeString(kKeyBlobAttribute, key_blob);
-  object->RemoveAttribute(CKA_PRIVATE_EXPONENT);
-  object->RemoveAttribute(CKA_PRIME_1);
-  object->RemoveAttribute(CKA_PRIME_2);
-  object->RemoveAttribute(CKA_EXPONENT_1);
-  object->RemoveAttribute(CKA_EXPONENT_2);
-  object->RemoveAttribute(CKA_COEFFICIENT);
+  // if (!tpm_utility_ || !tpm_utility_->IsTPMAvailable() ||
+  //     object->GetObjectClass() != CKO_PRIVATE_KEY ||
+  //     object->IsAttributePresent(kKeyBlobAttribute)) {
+  //   // This object does not need to be wrapped.
+  //   return CKR_OK;
+  // }
+  // if (!object->IsAttributePresent(CKA_PUBLIC_EXPONENT) ||
+  //     !object->IsAttributePresent(CKA_MODULUS) ||
+  //     !(object->IsAttributePresent(CKA_PRIME_1) ||
+  //       object->IsAttributePresent(CKA_PRIME_2)))
+  //   return CKR_TEMPLATE_INCOMPLETE;
+  // string prime;
+  // if (object->IsAttributePresent(CKA_PRIME_1)) {
+  //   prime = object->GetAttributeString(CKA_PRIME_1);
+  // } else {
+  //   prime = object->GetAttributeString(CKA_PRIME_2);
+  // }
+  // int key_size_bits = object->GetAttributeString(CKA_MODULUS).length() * 8;
+  // if (key_size_bits > kMaxRSAKeyBitsHW || key_size_bits < kMinRSAKeyBits) {
+  //   LOG(WARNING) << "WARNING: " << key_size_bits
+  //                << "-bit private key cannot be wrapped by the TPM.";
+  //   // Fall back to software.
+  //   return CKR_OK;
+  // }
+  // string auth_data = GenerateRandomSoftware(kDefaultAuthDataBytes);
+  // string key_blob;
+  // int tpm_key_handle = 0;
+  // if (!tpm_utility_->WrapKey(slot_id_,
+  //                            object->GetAttributeString(CKA_PUBLIC_EXPONENT),
+  //                            object->GetAttributeString(CKA_MODULUS),
+  //                            prime,
+  //                            SecureBlob(auth_data.begin(), auth_data.end()),
+  //                            &key_blob,
+  //                            &tpm_key_handle))
+  //   return CKR_FUNCTION_FAILED;
+  // object->SetAttributeString(kAuthDataAttribute, auth_data);
+  // object->SetAttributeString(kKeyBlobAttribute, key_blob);
+  // object->RemoveAttribute(CKA_PRIVATE_EXPONENT);
+  // object->RemoveAttribute(CKA_PRIME_1);
+  // object->RemoveAttribute(CKA_PRIME_2);
+  // object->RemoveAttribute(CKA_EXPONENT_1);
+  // object->RemoveAttribute(CKA_EXPONENT_2);
+  // object->RemoveAttribute(CKA_COEFFICIENT);
   return CKR_OK;
 }
 

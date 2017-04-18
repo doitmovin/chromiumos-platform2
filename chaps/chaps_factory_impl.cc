@@ -18,7 +18,6 @@
 #include "chaps/object_pool_impl.h"
 #include "chaps/object_store_fake.h"
 #include "chaps/object_store_impl.h"
-#include "chaps/opencryptoki_importer.h"
 #include "chaps/session_impl.h"
 
 using base::FilePath;
@@ -28,12 +27,12 @@ namespace chaps {
 
 Session* ChapsFactoryImpl::CreateSession(int slot_id,
                                          std::shared_ptr<ObjectPool> token_object_pool,
-                                         std::shared_ptr<TPMUtility> tpm_utility,
+                                         std::shared_ptr<NetUtility> net_utility,
                                          std::shared_ptr<HandleGenerator> handle_generator,
                                          bool is_read_only) {
   return new SessionImpl(slot_id,
                          token_object_pool,
-                         tpm_utility,
+                         net_utility,
                          shared_from_this(),
                          handle_generator,
                          is_read_only);
@@ -41,12 +40,10 @@ Session* ChapsFactoryImpl::CreateSession(int slot_id,
 
 ObjectPool* ChapsFactoryImpl::CreateObjectPool(
     std::shared_ptr<HandleGenerator> handle_generator,
-    std::unique_ptr<ObjectStore> object_store,
-    std::unique_ptr<ObjectImporter> object_importer) {
+    std::unique_ptr<ObjectStore> object_store) {
   std::unique_ptr<ObjectPoolImpl> pool(new ObjectPoolImpl(shared_from_this(),
                                                      handle_generator,
-                                                     std::move(object_store),
-                                                     std::move(object_importer)));
+                                                     std::move(object_store)));
   CHECK(pool.get());
   if (!pool->Init())
     return NULL;
@@ -84,16 +81,6 @@ ObjectPolicy* ChapsFactoryImpl::CreateObjectPolicy(CK_OBJECT_CLASS type) {
       return new ObjectPolicySecretKey();
   }
   return new ObjectPolicyCommon();
-}
-
-ObjectImporter* ChapsFactoryImpl::CreateObjectImporter(
-    int slot_id,
-    const FilePath& path,
-    std::shared_ptr<TPMUtility> tpm_utility) {
-  if (!tpm_utility || !tpm_utility->IsTPMAvailable()) {
-    return NULL;
-  }
-  return new OpencryptokiImporter(slot_id, path, tpm_utility, this);
 }
 
 }  // namespace chaps

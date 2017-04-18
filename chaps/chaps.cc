@@ -136,11 +136,10 @@ CK_RV C_Initialize(CK_VOID_PTR pInitArgs) {
   }
   // If we're not using a mock proxy instance we need to create one.
   if (!g_is_using_mock) {
-    std::shared_ptr<chaps::TPMUtility> tpm(NULL);
     std::shared_ptr<chaps::ChapsFactoryImpl>
       factory(new chaps::ChapsFactoryImpl());
     std::shared_ptr<chaps::SlotManagerImpl>
-      slot_mgr(new chaps::SlotManagerImpl(factory, tpm, true));
+      slot_mgr(new chaps::SlotManagerImpl(factory, NULL, true));
     if (!slot_mgr->Init())
         LOG_CK_RV_AND_RETURN(CKR_GENERAL_ERROR);
     std::unique_ptr<chaps::ChapsServiceImpl>

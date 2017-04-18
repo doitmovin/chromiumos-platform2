@@ -23,7 +23,6 @@ namespace chaps {
 
 class ChapsFactory;
 class HandleGenerator;
-class ObjectImporter;
 
 // Key: Object handle.
 // Value: Object shared pointer.
@@ -38,8 +37,7 @@ class ObjectPoolImpl : public ObjectPool {
   // Otherwise, 'store' will be owned by (and later deleted by) the object pool.
   ObjectPoolImpl(std::shared_ptr<ChapsFactory> factory,
                  std::shared_ptr<HandleGenerator> handle_generator,
-                 std::unique_ptr<ObjectStore> store,
-                 std::unique_ptr<ObjectImporter> importer);
+                 std::unique_ptr<ObjectStore> store);
   virtual ~ObjectPoolImpl();
   virtual bool Init();
   virtual bool GetInternalBlob(int blob_id, std::string* blob);
@@ -73,11 +71,9 @@ class ObjectPoolImpl : public ObjectPool {
   std::shared_ptr<ChapsFactory> factory_;
   std::shared_ptr<HandleGenerator> handle_generator_;
   std::unique_ptr<ObjectStore> store_;
-  std::unique_ptr<ObjectImporter> importer_;
   bool is_private_loaded_;
   base::Lock lock_;
   base::WaitableEvent private_loaded_event_;
-  bool finish_import_required_;
 
   DISALLOW_COPY_AND_ASSIGN(ObjectPoolImpl);
 };

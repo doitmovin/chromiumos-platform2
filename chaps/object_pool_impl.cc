@@ -18,7 +18,6 @@
 #include "chaps/chaps_utility.h"
 #include "chaps/handle_generator.h"
 #include "chaps/object.h"
-#include "chaps/object_importer.h"
 #include "chaps/object_store.h"
 #include "chaps/proto_bindings/attributes.pb.h"
 
@@ -34,18 +33,16 @@ namespace chaps {
 
 ObjectPoolImpl::ObjectPoolImpl(std::shared_ptr<ChapsFactory> factory,
                                std::shared_ptr<HandleGenerator> handle_generator,
-                               std::unique_ptr<ObjectStore> store,
-                               std::unique_ptr<ObjectImporter> importer)
+                               std::unique_ptr<ObjectStore> store)
     : factory_(factory),
       handle_generator_(handle_generator),
       store_(std::move(store)),
-      importer_(std::move(importer)),
       is_private_loaded_(false),
       private_loaded_event_(base::WaitableEvent::ResetPolicy::MANUAL,
-        base::WaitableEvent::InitialState::NOT_SIGNALED),  // Manual reset, not signaled.
-      finish_import_required_(false) {
-        store_.reset();
-      }
+        base::WaitableEvent::InitialState::NOT_SIGNALED)  // Manual reset, not signaled.
+  {
+    store_.reset();
+  }
 
 ObjectPoolImpl::~ObjectPoolImpl() {}
 
@@ -59,12 +56,6 @@ bool ObjectPoolImpl::Init() {
     // are ignored.
     AutoUnlock unlock(lock_);
     string imported_blob;
-    if (importer_.get() && !GetInternalBlob(kImportedTracker, &imported_blob)) {
-      finish_import_required_ = importer_->ImportObjects(this);
-      if (!SetInternalBlob(kImportedTracker, imported_blob)) {
-        LOG(WARNING) << "Failed to set the import tracker.";
-      }
-    }
   } else {
     // There are no objects to load.
     is_private_loaded_ = true;
@@ -97,13 +88,6 @@ bool ObjectPoolImpl::SetEncryptionKey(const SecureBlob& key) {
     // Once we have the encryption key we can load private objects.
     if (!LoadPrivateObjects())
       LOG(WARNING) << "Failed to load private objects.";
-    if (finish_import_required_) {
-      CHECK(importer_.get());
-      // Unlock because FinishImportAsync inserts objects into this pool.
-      AutoUnlock unlock(lock_);
-      if (!importer_->FinishImportAsync(this))
-        LOG(WARNING) << "Failed to finish importing objects.";
-    }
   }
   // Signal any callers waiting for private objects that they're ready.
   is_private_loaded_ = true;

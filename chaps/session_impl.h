@@ -18,14 +18,14 @@
 #include "chaps/chaps_factory.h"
 #include "chaps/object.h"
 #include "chaps/object_pool.h"
-#include "chaps/tpm_utility.h"
+#include "net_utility.h"
 #include "pkcs11/cryptoki.h"
 
 namespace chaps {
 
 class ChapsFactory;
 class ObjectPool;
-class TPMUtility;
+class NetUtility;
 
 // SessionImpl is the interface for a PKCS #11 session.  This component is
 // responsible for maintaining session state including the state of any multi-
@@ -40,7 +40,7 @@ class SessionImpl : public Session {
   // sessions and slots.
   SessionImpl(int slot_id,
               std::shared_ptr<ObjectPool> token_object_pool,
-              std::shared_ptr<TPMUtility> tpm_utility,
+              std::shared_ptr<NetUtility> net_utility,
               std::shared_ptr<ChapsFactory> factory,
               std::shared_ptr<HandleGenerator> handle_generator,
               bool is_read_only);
@@ -212,7 +212,7 @@ class SessionImpl : public Session {
   int slot_id_;
   std::shared_ptr<ObjectPool> session_object_pool_;
   std::shared_ptr<ObjectPool> token_object_pool_;
-  std::shared_ptr<TPMUtility> tpm_utility_;
+  std::shared_ptr<NetUtility> net_utility_;
   bool is_legacy_loaded_;  // Tracks whether the legacy root keys are loaded.
   int private_root_key_;  // The legacy private root key.
   int public_root_key_;  // The legacy public root key.

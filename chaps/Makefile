@@ -311,7 +311,7 @@ XXX_BASE_OBJS =     base/at_exit.o \
 
 
 # Chaps Client Library
-libchaps_OBJS = $(COMMON_OBJS) chaps.o chaps_service.o \
+libchaps_OBJS = $(COMMON_OBJS) chaps.o \
 								chaps_service.o \
 								slot_manager_impl.o \
 								session_impl.o \
@@ -327,17 +327,7 @@ libchaps_OBJS = $(COMMON_OBJS) chaps.o chaps_service.o \
 								chaps_factory_impl.o \
 								object_store_impl.o \
 								attributes.o \
-								opencryptoki_importer.o \
 								brillo/secure_blob.o
-#								base/synchronization/lock.o
-#							  base/files/file_util.o \
-#								base/files/file_util_posix.o \
-#								base/strings/string_number_conversions.o \
-#								base/strings/stringprintf.o \
-#								base/synchronization/waitable_event_posix.o \
-#								base/location.o \
-#								base/time/time.o \
-#								$(BASE_OBJS)
 CXX_LIBRARY(libchaps.so): $(libchaps_OBJS)
 clean: CLEAN(libchaps.so)
 all: CXX_LIBRARY(libchaps.so)
